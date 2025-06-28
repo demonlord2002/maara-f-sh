@@ -3,6 +3,7 @@ from pyrogram.types import Message
 import os, json
 from dotenv import load_dotenv
 
+# Load environment variables from .env
 load_dotenv()
 
 API_ID = int(os.getenv("API_ID"))
@@ -12,15 +13,18 @@ OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
 
 DB_FILE = "db.json"
 
+# Create database file if not exists
 if not os.path.exists(DB_FILE):
     with open(DB_FILE, "w") as f:
         json.dump({}, f)
 
+# Load database
 with open(DB_FILE, "r") as f:
     db = json.load(f)
 
 app = Client("madara_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
+# Start command
 @app.on_message(filters.command("start") & filters.private)
 async def start_cmd(client, message: Message):
     args = message.text.split()
@@ -28,7 +32,11 @@ async def start_cmd(client, message: Message):
         file_id = args[1]
         if file_id in db:
             file_info = db[file_id]
-            await client.copy_message(chat_id=message.chat.id, from_chat_id=file_info["chat_id"], message_id=file_info["msg_id"])
+            await client.copy_message(
+                chat_id=message.chat.id,
+                from_chat_id=file_info["chat_id"],
+                message_id=file_info["msg_id"]
+            )
         else:
             await message.reply("❌ File not found or expired.")
     else:
@@ -42,6 +50,7 @@ async def start_cmd(client, message: Message):
 — 💀 Powered by Madara"""
         )
 
+# Save file and generate link
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -59,11 +68,10 @@ async def save_file(client, message: Message):
 
     bot_username = (await app.get_me()).username
     link = f"https://t.me/{bot_username}?start={file_id}"
-    await message.reply(f"✅ File saved! 📁 {file_name}")
 
-📎 Link:
-{link}")
+    await message.reply(f"✅ File saved!\n📎 Link: {link}")
 
+# Broadcast to all users
 @app.on_message(filters.command("broadcast") & filters.private)
 async def broadcast_handler(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -71,8 +79,7 @@ async def broadcast_handler(client, message: Message):
 
     text = message.text.split(maxsplit=1)
     if len(text) < 2:
-        return await message.reply("❗ Send like this:
-`/broadcast Your message here`")
+        return await message.reply("❗ Send like this:\n`/broadcast Your message here`")
 
     sent = 0
     failed = 0
@@ -82,9 +89,7 @@ async def broadcast_handler(client, message: Message):
             sent += 1
         except:
             failed += 1
-    await message.reply(f"📢 Broadcast finished.
-✅ Sent: {sent}
-❌ Failed: {failed}")
+    await message.reply(f"📢 Broadcast finished.\n✅ Sent: {sent}\n❌ Failed: {failed}")
 
 print("✅ MADARA FILE SHARE BOT is running...")
 app.run()
