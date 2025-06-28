@@ -132,6 +132,6 @@ Born to destroy, not to please ⚔️
 
 ---
 
-## 🙏 Credits
+## 🐲 Made by Madara Uchiha
 
-- Modded for Madara power by: @Madara_Uchiha_lI
+For any power-ups or alliance: [@Madara_Uchiha_lI](https://t.me/Madara_Uchiha_lI)
