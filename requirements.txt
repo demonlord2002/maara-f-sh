@@ -1,2 +1,4 @@
 pyrogram==2.0.106
-tgcrypto
+tgcrypto==1.2.5
+pymongo[srv]==4.5.0
+python-dotenv==1.0.1
