@@ -134,5 +134,4 @@ Born to destroy, not to please ⚔️
 
 ## 🙏 Credits
 
-- Original repo: https://github.com/cookies2002/file_share_bot
-- Modded for Madara power by: @YourUsername
+- Modded for Madara power by: @Madara_Uchiha_lI
