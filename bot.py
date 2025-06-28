@@ -33,7 +33,7 @@ async def save_file(client, message: Message):
     file_id = str(message.id)
     db[file_id] = {
         "chat_id": message.chat.id,
-        "msg_id": message.message_id
+        "msg_id": message.id
     }
     with open(DB_FILE, "w") as f:
         json.dump(db, f)
