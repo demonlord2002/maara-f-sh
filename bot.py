@@ -59,7 +59,7 @@ async def save_file(client, message: Message):
 
     bot_username = (await app.get_me()).username
     link = f"https://t.me/{bot_username}?start={file_id}"
-    await message.reply(f"✅ File saved!
+    await message.reply(f"✅ File saved! 📁 {file_name}")
 
 📎 Link:
 {link}")
