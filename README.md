@@ -1,59 +1,36 @@
-# 📁 Telegram File Share Bot
 
-A simple Telegram bot that stores forwarded files and generates shareable links that anyone can use to download them. Powered by Pyrogram and easily deployable on Heroku.
+# 𓆩𓆩 𝗠 𝗔 𝗗 𝗔 𝗥 𝗔 File Share Bot
 
----
+**Easily share files using Telegram shareable links. Only owner can upload.**
 
-## 🚀 Deploy to Heroku
+### 🔹 Features
+- Upload any Telegram file and get a shareable link
+- File is stored privately in a channel
+- Users can access it via link
+- Owner-only control
 
-Click the button below to deploy this bot to **Heroku** in one click:
+### 🚀 Deploy to Railway
 
-<p align="center">
-  <a href="https://heroku.com/deploy?template=https://github.com/cookies2002/file_share_bot">
-    <img src="https://img.shields.io/badge/Deploy%20To%20Heroku-purple?style=for-the-badge&logo=heroku"/>
-  </a>
-</p>
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/SAMPLELINK)
 
----
+### 🛠️ Setup
+1. Fork the repo and clone it
+2. Setup a MongoDB cluster at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+3. Create a Telegram Bot using [@BotFather](https://t.me/BotFather)
+4. Get API ID and HASH from [my.telegram.org](https://my.telegram.org)
+5. Create a private channel and make your bot admin
+6. Fill `.env` with your values
 
-## ⚙️ Features
+### 📦 Install
+```
+pip install -r requirements.txt
+```
 
-- 🔐 Owner-only file sharing
-- 🔗 Share any Telegram file through a unique URL
-- 💾 Files are stored in a private channel
-- 🎯 Only bot owner can generate share links
-- 📬 Supports media files of all types
-- 🗑️ Automatically deletes expired or old file references (optional)
-
----
-
-## 🧩 Environment Variables
-
-| Variable        | Description                                      |
-|-----------------|--------------------------------------------------|
-| `BOT_TOKEN`     | Your bot token from [@BotFather](https://t.me/BotFather) |
-| `API_ID`        | Telegram API ID from [my.telegram.org](https://my.telegram.org) |
-| `API_HASH`      | Telegram API Hash from [my.telegram.org](https://my.telegram.org) |
-| `OWNER_ID`      | Your Telegram user ID (get it via @userinfobot)  |
-| `CHANNEL_ID`    | ID of your private storage channel (bot must be admin) |
-
----
-
-## 💻 Run Locally (Advanced)
-
-```bash
-git clone https://github.com/cookies2002/file_share_bot
-cd file_share_bot
-
-# Install dependencies
-pip3 install -r requirements.txt
-
-# Set environment variables (can use dotenv or export manually)
-export BOT_TOKEN="YOUR_BOT_TOKEN"
-export API_ID=123456
-export API_HASH="your_api_hash"
-export OWNER_ID=123456789
-export CHANNEL_ID=-100xxxxxxxxx
-
-# Run the bot
+### ▶️ Run Locally
+```
 python3 bot.py
+```
+
+---
+
+✨ Built by @YourUsername
