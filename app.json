@@ -1,0 +1,34 @@
+{
+  "name": "TG File Share Bot",
+  "description": "A Telegram bot that allows the owner to share files with special links.",
+  "keywords": ["telegram", "files", "bot"],
+  "repository": "https://github.com/example/repo",
+  "env": {
+    "TG_BOT_TOKEN": {
+      "description": "Your bot token from @BotFather"
+    },
+    "APP_ID": {
+      "description": "App ID from my.telegram.org"
+    },
+    "API_HASH": {
+      "description": "API hash from my.telegram.org"
+    },
+    "OWNER_ID": {
+      "description": "Your Telegram User ID"
+    },
+    "CHANNEL_ID": {
+      "description": "Private channel ID where files will be stored"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  }
+}
