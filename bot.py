@@ -22,7 +22,7 @@ async def start_cmd(client, message: Message):
 
 @app.on_message(filters.document | filters.video | filters.audio | filters.photo)
 async def save_file(client, message: Message):
-    file_id = str(message.message_id)
+    file_id = str(message.id)
     db[file_id] = {
         "chat_id": message.chat.id,
         "msg_id": message.message_id
