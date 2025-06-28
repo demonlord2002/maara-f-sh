@@ -41,4 +41,6 @@ async def send_file(client, message: Message):
     else:
         await message.reply("❌ File not found or expired.")
 
-app.run()
+print("✅ Bot is running. Waiting for Telegram messages...")
+bot.run()
+
