@@ -26,6 +26,8 @@ with open(USERS_FILE, "r") as f:
 app = Client("madara_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 def is_active(user_id):
+    if user_id in OWNER_IDS:
+        return True  # always active for owners
     expiry = allowed_users.get(str(user_id))
     if not expiry:
         return False
