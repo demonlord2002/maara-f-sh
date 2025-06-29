@@ -3,7 +3,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_ID = 12345678  # Your API ID from my.telegram.org
-API_HASH = "your_api_hash"  # Your API HASH
-BOT_TOKEN = "your_bot_token"  # From BotFather
-OWNER_IDS = [123456789, 098766665]  # Add your Telegram user ID and your friend's ID
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Convert comma-separated OWNER_IDS to list of ints
+OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
