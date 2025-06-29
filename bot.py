@@ -1,14 +1,13 @@
-# Madara Uchiha File Share Bot with 28-Day Expiry Feature
-
 from pyrogram import Client, filters
 from pyrogram.types import Message
 import os, json, time
 from dotenv import load_dotenv
 
 load_dotenv()
+
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN"))
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
 
 DB_FILE = "db.json"
@@ -35,7 +34,6 @@ def is_active(user_id):
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     user_id = message.from_user.id
-    print(f"/start triggered by {user_id}")
     if not is_active(user_id):
         await message.reply(
             "❌ You dare challenge Madara Uchiha's forbidden uploader?\n\n"
@@ -69,7 +67,6 @@ async def start_cmd(client, message: Message):
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
     user_id = message.from_user.id
-    print(f"/status triggered by {user_id}")
     expiry = allowed_users.get(str(user_id))
     if not expiry:
         await message.reply("⛔ You have no active plan.\nSpeak to @Madara_Uchiha_lI to unlock forbidden power.")
@@ -86,7 +83,6 @@ async def status_cmd(client, message: Message):
 @app.on_message(filters.private & filters.command("addusers"))
 async def add_user(client, message: Message):
     user_id = message.from_user.id
-    print(f"/addusers triggered by {user_id}")
     if user_id not in OWNER_IDS:
         return await message.reply("❌ Only Madara can add warriors.")
     parts = message.text.split()
@@ -103,7 +99,6 @@ async def add_user(client, message: Message):
 @app.on_message(filters.private & filters.command("delusers"))
 async def del_user(client, message: Message):
     user_id = message.from_user.id
-    print(f"/delusers triggered by {user_id}")
     if user_id not in OWNER_IDS:
         return await message.reply("❌ Only Madara can revoke access.")
     parts = message.text.split()
@@ -145,11 +140,9 @@ async def help_cmd(client, message: Message):
 async def broadcast_handler(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Forbidden. You're not the ghost of Uchiha.")
-
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         return await message.reply("❗ Usage:\n/broadcast Your message here")
-
     sent, failed = 0, 0
     for user_id in allowed_users:
         try:
@@ -157,7 +150,6 @@ async def broadcast_handler(client, message: Message):
             sent += 1
         except:
             failed += 1
-
     await message.reply(f"📢 Message sent.\n✅ Success: {sent}\n❌ Failed: {failed}")
 
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
@@ -165,12 +157,10 @@ async def save_file(client, message: Message):
     user_id = message.from_user.id
     if not is_active(user_id):
         return await message.reply("🚫 Forbidden scroll upload attempt blocked.\nActivate your plan to use Sharingan Files.")
-
     file_id = str(message.id)
     db[file_id] = {"chat_id": message.chat.id, "msg_id": message.id}
     with open(DB_FILE, "w") as f:
         json.dump(db, f)
-
     bot_username = (await app.get_me()).username
     link = f"https://t.me/{bot_username}?start={file_id}"
     await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
