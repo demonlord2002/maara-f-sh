@@ -120,7 +120,7 @@ async def get_users(client, message: Message):
         return await message.reply("⚠️ No shinobi recruited yet.")
     user_list = "**👤 Uchiha Sharing Squad:**\n\n"
     for uid in allowed_users:
-        user_list += f"- `{uid}` → [Chat](https://t.me/user?id={uid})\n"
+        user_list += f"- `{uid}` — [Click Here](tg://user?id={uid})\n"
     await message.reply(user_list, disable_web_page_preview=True)
 
 # /help command
