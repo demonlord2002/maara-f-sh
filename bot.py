@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN"))
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
 
 DB_FILE = "db.json"
@@ -32,9 +32,10 @@ def is_active(user_id):
         return False
     return time.time() < expiry
 
-@app.on_message(filters.command("start") & filters.private)
+@app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     user_id = message.from_user.id
+    print(f"/start triggered by {user_id}")
     if not is_active(user_id):
         await message.reply(
             "❌ You dare challenge Madara Uchiha's forbidden uploader?\n\n"
@@ -65,9 +66,10 @@ async def start_cmd(client, message: Message):
             "⏳ Use /status to check your plan time."
         )
 
-@app.on_message(filters.command("status") & filters.private)
+@app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
     user_id = message.from_user.id
+    print(f"/status triggered by {user_id}")
     expiry = allowed_users.get(str(user_id))
     if not expiry:
         await message.reply("⛔ You have no active plan.\nSpeak to @Madara_Uchiha_lI to unlock forbidden power.")
@@ -81,9 +83,11 @@ async def status_cmd(client, message: Message):
         minutes = int((remaining % 3600) // 60)
         await message.reply(f"🔥 Your Sharing Jutsu is active!\n⏱ Time left: {days}d {hours}h {minutes}m")
 
-@app.on_message(filters.command("addusers") & filters.private)
+@app.on_message(filters.private & filters.command("addusers"))
 async def add_user(client, message: Message):
-    if message.from_user.id not in OWNER_IDS:
+    user_id = message.from_user.id
+    print(f"/addusers triggered by {user_id}")
+    if user_id not in OWNER_IDS:
         return await message.reply("❌ Only Madara can add warriors.")
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
@@ -96,9 +100,11 @@ async def add_user(client, message: Message):
         json.dump(allowed_users, f)
     await message.reply(f"✅ Shinobi `{new_user}` granted 28 days of power.")
 
-@app.on_message(filters.command("delusers") & filters.private)
+@app.on_message(filters.private & filters.command("delusers"))
 async def del_user(client, message: Message):
-    if message.from_user.id not in OWNER_IDS:
+    user_id = message.from_user.id
+    print(f"/delusers triggered by {user_id}")
+    if user_id not in OWNER_IDS:
         return await message.reply("❌ Only Madara can revoke access.")
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
@@ -125,15 +131,14 @@ async def get_users(client, message: Message):
 
 @app.on_message(filters.command("help") & filters.private)
 async def help_cmd(client, message: Message):
-    if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Help denied. Only Madara holds the commands.")
     await message.reply(
         "**⚙️ Uchiha Bot Commands:**\n\n"
-        "🔹 /addusers <id> — Grant 28-day access\n"
-        "🔹 /delusers <id> — Remove access\n"
-        "🔹 /getusers — List allowed users\n"
-        "🔹 /broadcast <msg> — Message all active shinobi\n"
-        "🔹 /status — View your remaining time"
+        "🔹 /start — Begin your session\n"
+        "🔹 /status — View remaining plan\n"
+        "🔹 /addusers <id> — (Owner) Give 28-day access\n"
+        "🔹 /delusers <id> — (Owner) Remove access\n"
+        "🔹 /getusers — (Owner) List allowed users\n"
+        "🔹 /broadcast <msg> — (Owner) DM all users"
     )
 
 @app.on_message(filters.command("broadcast") & filters.private)
