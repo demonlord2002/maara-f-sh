@@ -4,7 +4,6 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 import os, json, time
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
 
 load_dotenv()
 API_ID = int(os.getenv("API_ID"))
@@ -60,9 +59,10 @@ async def start_cmd(client, message: Message):
     else:
         await message.reply(
             "**🩸 Madara Uchiha File Share Bot**\n\n"
-            "Send me any file and I will return a private sharing link.\n"
-            "Only chosen shinobi can access the vault.\n"
-            "Use /status to check your remaining time."
+            "Drop your files like a shinobi, share like a legend 💀\n"
+            "Only Uchiha-blessed users can create secret links.\n\n"
+            "📌 Send any file to receive a private sharing link.\n"
+            "⏳ Use /status to check your plan time."
         )
 
 @app.on_message(filters.command("status") & filters.private)
@@ -70,80 +70,80 @@ async def status_cmd(client, message: Message):
     user_id = message.from_user.id
     expiry = allowed_users.get(str(user_id))
     if not expiry:
-        await message.reply("❌ You are not authorized.\nContact @Madara_Uchiha_lI to activate your plan.")
+        await message.reply("⛔ You have no active plan.\nSpeak to @Madara_Uchiha_lI to unlock forbidden power.")
         return
     remaining = expiry - time.time()
     if remaining <= 0:
-        await message.reply("⛔ Your plan has expired.\nContact @Madara_Uchiha_lI to renew it.")
+        await message.reply("🩸 Your power has faded.\n⚠️ Plan expired. Contact @Madara_Uchiha_lI to reactivate.")
     else:
         days = int(remaining // 86400)
         hours = int((remaining % 86400) // 3600)
         minutes = int((remaining % 3600) // 60)
-        await message.reply(f"✅ You are authorized.\nTime left: {days} days, {hours} hours, {minutes} minutes")
+        await message.reply(f"🔥 Your Sharing Jutsu is active!\n⏱ Time left: {days}d {hours}h {minutes}m")
 
 @app.on_message(filters.command("addusers") & filters.private)
 async def add_user(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Only owners can add users.")
+        return await message.reply("❌ Only Madara can add warriors.")
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
         return await message.reply("⚠️ Usage: /addusers <telegram_user_id>")
-    
+
     new_user = parts[1]
     expiry_time = time.time() + 28 * 86400
     allowed_users[new_user] = expiry_time
     with open(USERS_FILE, "w") as f:
         json.dump(allowed_users, f)
-    await message.reply(f"✅ User `{new_user}` added with 28 days access.")
+    await message.reply(f"✅ Shinobi `{new_user}` granted 28 days of power.")
 
 @app.on_message(filters.command("delusers") & filters.private)
 async def del_user(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Only owners can remove users.")
+        return await message.reply("❌ Only Madara can revoke access.")
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
         return await message.reply("⚠️ Usage: /delusers <telegram_user_id>")
 
     del_user = parts[1]
     if del_user not in allowed_users:
-        return await message.reply("ℹ️ User not found in allowed list.")
+        return await message.reply("ℹ️ User not found in the sharing realm.")
     del allowed_users[del_user]
     with open(USERS_FILE, "w") as f:
         json.dump(allowed_users, f)
-    await message.reply(f"✅ User `{del_user}` removed from access.")
+    await message.reply(f"✅ User `{del_user}` erased from access.")
 
 @app.on_message(filters.command("getusers") & filters.private)
 async def get_users(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Only owners can use this command.")
+        return await message.reply("❌ Forbidden scroll. Only Madara may open.")
     if not allowed_users:
-        return await message.reply("⚠️ No users have been added yet.")
-    user_list = "**👤 Allowed Users List:**\n\n"
+        return await message.reply("⚠️ No shinobi recruited yet.")
+    user_list = "**👤 Uchiha Sharing Squad:**\n\n"
     for uid in allowed_users:
-        user_list += f"- `{uid}` → [Link](https://t.me/user?id={uid})\n"
+        user_list += f"- `{uid}` → [Chat](https://t.me/user?id={uid})\n"
     await message.reply(user_list, disable_web_page_preview=True)
 
 @app.on_message(filters.command("help") & filters.private)
 async def help_cmd(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Only owners can use the /help command.")
+        return await message.reply("❌ Help denied. Only Madara holds the commands.")
     await message.reply(
-        "**🛠 Madara Uchiha Bot Commands:**\n\n"
-        "🔹 /addusers <id> — Give 28-day access\n"
+        "**⚙️ Uchiha Bot Commands:**\n\n"
+        "🔹 /addusers <id> — Grant 28-day access\n"
         "🔹 /delusers <id> — Remove access\n"
         "🔹 /getusers — List allowed users\n"
-        "🔹 /broadcast <msg> — Message all users\n"
-        "🔹 /status — Show your plan expiry"
+        "🔹 /broadcast <msg> — Message all active shinobi\n"
+        "🔹 /status — View your remaining time"
     )
 
 @app.on_message(filters.command("broadcast") & filters.private)
 async def broadcast_handler(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ You are not allowed to use this command.")
+        return await message.reply("❌ Forbidden. You're not the ghost of Uchiha.")
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        return await message.reply("❗ Use:\n`/broadcast Your message here`")
+        return await message.reply("❗ Usage:\n/broadcast Your message here")
 
     sent, failed = 0, 0
     for user_id in allowed_users:
@@ -153,13 +153,13 @@ async def broadcast_handler(client, message: Message):
         except:
             failed += 1
 
-    await message.reply(f"📢 Broadcast done.\n✅ Sent: {sent}\n❌ Failed: {failed}")
+    await message.reply(f"📢 Message sent.\n✅ Success: {sent}\n❌ Failed: {failed}")
 
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     user_id = message.from_user.id
     if not is_active(user_id):
-        return await message.reply("🚫 You're not allowed to upload files. Plan expired or not activated.")
+        return await message.reply("🚫 Forbidden scroll upload attempt blocked.\nActivate your plan to use Sharingan Files.")
 
     file_id = str(message.id)
     db[file_id] = {"chat_id": message.chat.id, "msg_id": message.id}
@@ -168,7 +168,7 @@ async def save_file(client, message: Message):
 
     bot_username = (await app.get_me()).username
     link = f"https://t.me/{bot_username}?start={file_id}"
-    await message.reply(f"✅ File saved!\n📎 Link: {link}")
+    await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
 
-print("✅ MADARA FILE SHARE BOT with PLAN is running...")
+print("🩸 MADARA FILE SHARE BOT is summoning forbidden chakra...")
 app.run()
