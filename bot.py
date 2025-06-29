@@ -157,7 +157,7 @@ async def get_users(client, message: Message):
         return await message.reply("⚠️ No users have been added yet.")
     user_list = "**👤 Allowed Users List:**\n\n"
     for uid in allowed_users:
-        user_list += f"- [`{uid}`](https://t.me/user?id={uid})\n"
+        user_list += f"- `{uid}` → [Link](https://t.me/user?id={uid})\n"
     await message.reply(user_list, disable_web_page_preview=True)
 
 
