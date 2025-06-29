@@ -1,10 +1,11 @@
+# Madara Uchiha File Share Bot (Ubuntu VPS version)
+
 from pyrogram import Client, filters
 from pyrogram.types import Message
 import os, json, time
 from dotenv import load_dotenv
 
 load_dotenv()
-
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -13,11 +14,13 @@ OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
 DB_FILE = "db.json"
 USERS_FILE = "users.json"
 
+# Create files if not exist
 for file in [DB_FILE, USERS_FILE]:
     if not os.path.exists(file):
         with open(file, "w") as f:
-            json.dump({} if file == DB_FILE else {}, f)
+            json.dump({} if file == USERS_FILE else {}, f)
 
+# Load data
 with open(DB_FILE, "r") as f:
     db = json.load(f)
 with open(USERS_FILE, "r") as f:
@@ -25,26 +28,18 @@ with open(USERS_FILE, "r") as f:
 
 app = Client("madara_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
+# Function to check if user is active
 def is_active(user_id):
     if user_id in OWNER_IDS:
-        return True  # always active for owners
+        return True
     expiry = allowed_users.get(str(user_id))
     if not expiry:
         return False
     return time.time() < expiry
 
+# /start command
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
-    user_id = message.from_user.id
-    if not is_active(user_id):
-        await message.reply(
-            "❌ You dare challenge Madara Uchiha's forbidden uploader?\n\n"
-            "⚠️ This bot is sealed for chosen users only.\n"
-            "🧿 Plan: 28 days for ₹50\n"
-            "👁‍🗨 Contact the ghost of the Akatsuki ➔ @Madara_Uchiha_lI"
-        )
-        return
-
     args = message.text.split()
     if len(args) == 2:
         file_id = args[1]
@@ -66,6 +61,7 @@ async def start_cmd(client, message: Message):
             "⏳ Use /status to check your plan time."
         )
 
+# /status command
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
     user_id = message.from_user.id
@@ -82,6 +78,7 @@ async def status_cmd(client, message: Message):
         minutes = int((remaining % 3600) // 60)
         await message.reply(f"🔥 Your Sharing Jutsu is active!\n⏱ Time left: {days}d {hours}h {minutes}m")
 
+# /addusers command
 @app.on_message(filters.private & filters.command("addusers"))
 async def add_user(client, message: Message):
     user_id = message.from_user.id
@@ -90,7 +87,6 @@ async def add_user(client, message: Message):
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
         return await message.reply("⚠️ Usage: /addusers <telegram_user_id>")
-
     new_user = parts[1]
     expiry_time = time.time() + 28 * 86400
     allowed_users[new_user] = expiry_time
@@ -98,6 +94,7 @@ async def add_user(client, message: Message):
         json.dump(allowed_users, f)
     await message.reply(f"✅ Shinobi `{new_user}` granted 28 days of power.")
 
+# /delusers command
 @app.on_message(filters.private & filters.command("delusers"))
 async def del_user(client, message: Message):
     user_id = message.from_user.id
@@ -106,7 +103,6 @@ async def del_user(client, message: Message):
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
         return await message.reply("⚠️ Usage: /delusers <telegram_user_id>")
-
     del_user = parts[1]
     if del_user not in allowed_users:
         return await message.reply("ℹ️ User not found in the sharing realm.")
@@ -115,6 +111,7 @@ async def del_user(client, message: Message):
         json.dump(allowed_users, f)
     await message.reply(f"✅ User `{del_user}` erased from access.")
 
+# /getusers command
 @app.on_message(filters.command("getusers") & filters.private)
 async def get_users(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -126,18 +123,20 @@ async def get_users(client, message: Message):
         user_list += f"- `{uid}` → [Chat](https://t.me/user?id={uid})\n"
     await message.reply(user_list, disable_web_page_preview=True)
 
+# /help command
 @app.on_message(filters.command("help") & filters.private)
 async def help_cmd(client, message: Message):
     await message.reply(
         "**⚙️ Uchiha Bot Commands:**\n\n"
-        "🔹 /start — Begin your session\n"
-        "🔹 /status — View remaining plan\n"
+        "🔹 /start — Begin your session or get shared file\n"
+        "🔹 /status — View remaining plan time\n"
         "🔹 /addusers <id> — (Owner) Give 28-day access\n"
         "🔹 /delusers <id> — (Owner) Remove access\n"
         "🔹 /getusers — (Owner) List allowed users\n"
         "🔹 /broadcast <msg> — (Owner) DM all users"
     )
 
+# /broadcast command
 @app.on_message(filters.command("broadcast") & filters.private)
 async def broadcast_handler(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -154,6 +153,7 @@ async def broadcast_handler(client, message: Message):
             failed += 1
     await message.reply(f"📢 Message sent.\n✅ Success: {sent}\n❌ Failed: {failed}")
 
+# File upload handler
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     user_id = message.from_user.id
