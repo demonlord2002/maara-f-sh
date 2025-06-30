@@ -12,7 +12,7 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
-DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")  # username or numeric ID
+DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")  # username or numeric
 
 DB_FILE = "db.json"
 USERS_FILE = "users.json"
@@ -73,6 +73,20 @@ async def status_cmd(client, message: Message):
     d, h, m = int(remaining // 86400), int((remaining % 86400) // 3600), int((remaining % 3600) // 60)
     await message.reply(f"🔥 Active Plan: {d}d {h}h {m}m")
 
+@app.on_message(filters.private & filters.command("help"))
+async def help_cmd(client, message: Message):
+    await message.reply(
+        "**🩸 Madara Uchiha File Share Bot — Help Menu**\n\n"
+        "📌 Send any file to receive a private shareable link.\n"
+        "✂️ `/sample HH:MM:SS to HH:MM:SS` — reply to a video to cut a short sample.\n"
+        "⏳ `/status` — check your remaining plan time.\n"
+        "👤 `/addusers <user_id>` — (owner only) add new user\n"
+        "❌ `/delusers <user_id>` — (owner only) remove user\n"
+        "📢 `/broadcast <message>` — (owner only) broadcast message to all users\n"
+        "📍 `/getusers` — (owner only) list of all users\n"
+        "\nOnly Uchiha-blessed users can use secret file share powers 🔥"
+    )
+
 @app.on_message(filters.private & filters.command("addusers"))
 async def add_user(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -113,22 +127,18 @@ async def get_users(client, message: Message):
 @app.on_message(filters.command("broadcast") & filters.private)
 async def broadcast(client, message):
     if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Only Madara can use /broadcast.")
-    
-    if not message.text or len(message.text.split(" ", 1)) < 2:
-        return await message.reply("❗ Usage:\n`/broadcast Your message here`")
-    
-    text = message.text.split(" ", 1)[1]
+        return await message.reply("❌ Forbidden.")
+    text = message.text.split(" ", 1)
+    if len(text) < 2:
+        return await message.reply("❗ Usage: /broadcast Your message")
     sent, failed = 0, 0
-    
     for uid in allowed_users:
         try:
-            await client.send_message(int(uid), text)
+            await client.send_message(int(uid), text[1])
             sent += 1
         except:
             failed += 1
-    
-    await message.reply(f"📢 Broadcast complete:\n✅ Sent: {sent}\n❌ Failed: {failed}")
+    await message.reply(f"📢 Broadcast Done\n✅ Sent: {sent}\n❌ Failed: {failed}")
 
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
@@ -157,8 +167,7 @@ async def sample_trim(client, message: Message):
         return await message.reply("⚠️ Max trim allowed: 60 seconds.")
 
     msg = await message.reply("📥 Downloading video...")
-    file_message = message.reply_to_message
-    file = await (file_message.video or file_message.document).download()
+    file = await message.reply_to_message.download()
 
     output = "sample_clip.mp4"
     cmd = ["ffmpeg", "-i", file, "-ss", start, "-t", str(duration), "-c:v", "libx264", "-c:a", "aac", output, "-y"]
@@ -173,20 +182,5 @@ async def sample_trim(client, message: Message):
     os.remove(file)
     os.remove(output)
 
-@app.on_message(filters.command("help") & filters.private)
-async def help_cmd(client, message):
-    await message.reply("""
-💡 **Help Menu**
-
-/send any file — to generate a secret download link
-/sample HH:MM:SS to HH:MM:SS — to extract 30s sample (reply to video)
-/addusers user_id — add user (owner only)
-/delusers user_id — remove user (owner only)
-/getusers — show active users
-/broadcast message — send DM to all active users
-/status — check user subscription
-    """)
-
 print("🩸 MADARA FILE SHARE BOT is summoning forbidden chakra...")
 app.run()
-        
