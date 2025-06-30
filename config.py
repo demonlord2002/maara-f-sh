@@ -15,3 +15,6 @@ OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
 
 # File database channel (username or channel ID with -100 prefix)
 DB_CHANNEL_ID = os.getenv("-1002718440283")  # e.g., "madara_db_test" or "-1001234567890"
+
+# MongoDB URI
+MONGO_URI = os.getenv("MONGO_URI")  # Optional, only if using MongoDB
