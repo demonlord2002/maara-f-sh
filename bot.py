@@ -2,7 +2,7 @@
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-import os, json, time
+import os, json, time, re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -54,8 +54,8 @@ async def start_cmd(client, message: Message):
             await message.reply("❌ File not found or expired.")
     else:
         await message.reply(
-            "**🩸 Madara Uchiha File Share Bot**\n\n"
-            "Drop your files like a shinobi, share like a legend 💀\n"
+            "**🍘 Madara Uchiha File Share Bot**\n\n"
+            "Drop your files like a shinobi, share like a legend 🚀\n"
             "Only Uchiha-blessed users can create secret links.\n\n"
             "📌 Send any file to receive a private sharing link.\n"
             "⏳ Use /status to check your plan time."
@@ -133,7 +133,8 @@ async def help_cmd(client, message: Message):
         "🔹 /addusers <id> — (Owner) Give 28-day access\n"
         "🔹 /delusers <id> — (Owner) Remove access\n"
         "🔹 /getusers — (Owner) List allowed users\n"
-        "🔹 /broadcast <msg> — (Owner) DM all users"
+        "🔹 /broadcast <msg> — (Owner) DM all users\n"
+        "🔹 /sample HH:MM:SS to HH:MM:SS — Trim sample from replied video"
     )
 
 # /broadcast command
@@ -167,5 +168,46 @@ async def save_file(client, message: Message):
     link = f"https://t.me/{bot_username}?start={file_id}"
     await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
 
-print("🩸 MADARA FILE SHARE BOT is summoning forbidden chakra...")
+# /sample command
+@app.on_message(filters.private & filters.command("sample") & filters.reply)
+async def sample_video(client, message: Message):
+    if not is_active(message.from_user.id):
+        return await message.reply("🚫 You are not authorized to use this feature.")
+
+    replied = message.reply_to_message
+    if not replied.video:
+        return await message.reply("⚠️ Please reply to a video with `/sample HH:MM:SS to HH:MM:SS`")
+
+    match = re.search(r"/sample (\d{1,2}:\d{2}:\d{2}) to (\d{1,2}:\d{2}:\d{2})", message.text)
+    if not match:
+        return await message.reply("⚠️ Incorrect format.\nUse: `/sample HH:MM:SS to HH:MM:SS`")
+
+    start_time = match.group(1)
+    end_time = match.group(2)
+
+    input_path = f"{replied.video.file_unique_id}.mp4"
+    output_path = f"sample_{input_path}"
+
+    await message.reply("📥 Downloading video...")
+    await replied.download(file_name=input_path)
+
+    await message.reply("✂️ Trimming sample video...")
+    duration_cmd = f"ffmpeg -y -i {input_path} -ss {start_time} -to {end_time} -c copy {output_path}"
+    result = os.system(duration_cmd)
+
+    if result != 0 or not os.path.exists(output_path):
+        return await message.reply("❌ Failed to generate sample. Please check the timestamp format.")
+
+    await message.reply("📤 Uploading sample...")
+    await client.send_video(
+        chat_id=message.chat.id,
+        video=output_path,
+        caption=f"🎞️ Sample from {start_time} to {end_time}",
+        supports_streaming=True
+    )
+
+    os.remove(input_path)
+    os.remove(output_path)
+
+print("🍘 MADARA FILE SHARE BOT is summoning forbidden chakra...")
 app.run()
