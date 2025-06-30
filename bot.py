@@ -36,7 +36,15 @@ def is_active(user_id):
     expiry = allowed_users.get(str(user_id))
     return expiry and time.time() < expiry
 
-# /start command
+# Helper for duration
+
+def _get_duration_seconds(start, end):
+    def to_seconds(t):
+        h, m, s = map(int, t.split(":"))
+        return h * 3600 + m * 60 + s
+    return to_seconds(end) - to_seconds(start)
+
+# /start
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     args = message.text.split()
@@ -53,7 +61,7 @@ async def start_cmd(client, message: Message):
             await message.reply("❌ File not found or expired.")
     else:
         await message.reply(
-            "**🩸 Madara Uchiha File Share Bot**\n\n"
+            "**🌸 Madara Uchiha File Share Bot**\n\n"
             "Drop your files like a shinobi, share like a legend 💀\n"
             "Only Uchiha-blessed users can create secret links.\n\n"
             "📌 Send any file to receive a private sharing link.\n"
@@ -66,15 +74,15 @@ async def status_cmd(client, message: Message):
     user_id = message.from_user.id
     expiry = allowed_users.get(str(user_id))
     if not expiry:
-        return await message.reply("⛔ You have no active plan.\nSpeak to @Madara_Uchiha_lI to unlock forbidden power.")
+        return await message.reply("⛔️ You have no active plan.\nSpeak to @Madara_Uchiha_lI to unlock forbidden power.")
     remaining = expiry - time.time()
     if remaining <= 0:
-        await message.reply("🩸 Your power has faded.\n⚠️ Plan expired. Contact @Madara_Uchiha_lI to reactivate.")
+        await message.reply("🌸 Your power has faded.\n⚠️ Plan expired. Contact @Madara_Uchiha_lI to reactivate.")
     else:
         d = int(remaining // 86400)
         h = int((remaining % 86400) // 3600)
         m = int((remaining % 3600) // 60)
-        await message.reply(f"🔥 Your Sharing Jutsu is active!\n⏱ Time left: {d}d {h}h {m}m")
+        await message.reply(f"🔥 Your Sharing Jutsu is active!\n🕱 Time left: {d}d {h}h {m}m")
 
 # /addusers
 @app.on_message(filters.private & filters.command("addusers"))
@@ -152,7 +160,7 @@ async def broadcast_handler(client, message: Message):
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     if not is_active(message.from_user.id):
-        return await message.reply("🚫 Forbidden scroll upload attempt blocked.\nActivate your plan to use Sharingan Files.")
+        return await message.reply("🛑 Forbidden scroll upload attempt blocked.\nActivate your plan to use Sharingan Files.")
     file_id = str(message.id)
     saved = await message.copy(chat_id=DB_CHANNEL_ID)
     db[file_id] = {"chat_id": DB_CHANNEL_ID, "msg_id": saved.id}
@@ -160,7 +168,66 @@ async def save_file(client, message: Message):
         json.dump(db, f)
     bot_username = (await app.get_me()).username
     link = f"https://t.me/{bot_username}?start={file_id}"
-    await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
+    await message.reply(f"✅ File sealed successfully!\n📌 Link: {link}")
+
+# /sample command
+@app.on_message(filters.private & filters.command("sample"))
+async def sample_cmd(client, message: Message):
+    if not message.reply_to_message or not message.reply_to_message.video:
+        return await message.reply(
+            "⚠️ Please reply to a **video file** with:\n`/sample HH:MM:SS to HH:MM:SS`",
+            quote=True
+        )
+
+    match = re.match(r"/sample (\d{2}:\d{2}:\d{2}) to (\d{2}:\d{2}:\d{2})", message.text)
+    if not match:
+        return await message.reply("❌ Invalid format.\nUse: `/sample 00:01:00 to 00:01:30`", quote=True)
+
+    start_time, end_time = match.groups()
+    duration = _get_duration_seconds(start_time, end_time)
+
+    if duration <= 0 or duration > 300:
+        return await message.reply("⚠️ Duration must be between 1 and 300 seconds (5 mins max)")
+
+    user_id = message.from_user.id
+    if not is_active(user_id):
+        return await message.reply("🚫 Forbidden. Activate your Sharingan plan.")
+
+    status = await message.reply("📥 Downloading video...")
+
+    folder = f"downloads/sample_{user_id}"
+    os.makedirs(folder, exist_ok=True)
+
+    input_path = os.path.join(folder, "input.mp4")
+    output_path = os.path.join(folder, "output.mp4")
+
+    try:
+        await message.reply_to_message.download(file_name=input_path)
+    except Exception as e:
+        return await status.edit("❌ Download failed. File not saved properly.")
+
+    await status.edit("✂️ Trimming sample video...")
+
+    fast_cmd = f"ffmpeg -ss {start_time} -i '{input_path}' -t {duration} -c copy -avoid_negative_ts 1 '{output_path}' -y"
+    result = os.system(fast_cmd)
+
+    if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+        await status.edit("⚠️ Fast trim failed, retrying with safe mode...")
+        safe_cmd = f"ffmpeg -ss {start_time} -i '{input_path}' -t {duration} -c:v libx264 -c:a aac '{output_path}' -y"
+        os.system(safe_cmd)
+
+    if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+        return await status.edit("❌ Failed to generate sample. Please check timestamps or input file.")
+
+    await status.edit("📤 Uploading trimmed sample...")
+    await message.reply_video(output_path, caption="🎬 Sample trimmed by Madara Uchiha Bot 🩸")
+
+    try:
+        os.remove(input_path)
+        os.remove(output_path)
+        os.rmdir(folder)
+    except:
+        pass
 
 print("🩸 MADARA FILE SHARE BOT is summoning forbidden chakra...")
 app.run()
