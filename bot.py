@@ -154,7 +154,9 @@ async def save_file(client, message: Message):
 
 @app.on_message(filters.command("sample") & filters.private)
 async def sample_trim(client, message: Message):
-    if not message.reply_to_message or not (message.reply_to_message.video or message.reply_to_message.document):
+    if not message.reply_to_message or not (
+        message.reply_to_message.video or message.reply_to_message.document
+    ):
         return await message.reply("⚠️ Please reply to a video file with:\n/sample HH:MM:SS to HH:MM:SS")
 
     match = re.search(r"(\d{2}:\d{2}:\d{2})\s+to\s+(\d{2}:\d{2}:\d{2})", message.text)
@@ -164,23 +166,51 @@ async def sample_trim(client, message: Message):
     start, end = match.group(1), match.group(2)
     duration = get_duration_seconds(start, end)
     if duration <= 0 or duration > 60:
-        return await message.reply("⚠️ Max trim allowed: 60 seconds.")
+        return await message.reply("⚠️ Duration must be between 1–60 seconds.")
 
     msg = await message.reply("📥 Downloading video...")
-    file = await message.reply_to_message.download()
 
-    output = "sample_clip.mp4"
-    cmd = [ "ffmpeg", "-ss", start, "-i", file_path, "-t", str(duration), "-c", "copy", output, "-y" ]
-    process = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        input_path = await message.reply_to_message.download()
+    except Exception as e:
+        return await msg.edit("❌ Download failed. File not saved properly.")
+
+    output_path = "sample_clip.mp4"
+
+    # Try fast trim first (copy mode)
+    await msg.edit("✂️ Trimming sample video (fast mode)...")
+    fast_cmd = [
+        "ffmpeg", "-ss", start, "-i", input_path, "-t", str(duration),
+        "-c", "copy", output_path, "-y"
+    ]
+    process = await asyncio.create_subprocess_exec(*fast_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     await process.communicate()
 
-    if not os.path.exists(output):
-        return await msg.edit("❌ Failed to generate sample.")
+    # If fast mode fails, fallback to re-encode
+    if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+        await msg.edit("⚠️ Fast trim failed, retrying with safe mode...")
+        slow_cmd = [
+            "ffmpeg", "-i", input_path, "-ss", start, "-t", str(duration),
+            "-c:v", "libx264", "-c:a", "aac", output_path, "-y"
+        ]
+        process = await asyncio.create_subprocess_exec(*slow_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        await process.communicate()
+
+    # Final check and send
+    if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+        os.remove(input_path)
+        return await msg.edit("❌ Failed to generate sample. Please check the video format.")
 
     await msg.edit("📤 Uploading sample...")
-    await client.send_video(message.chat.id, video=output, caption=f"✂️ Sample clip from {start} to {end}")
-    os.remove(file)
-    os.remove(output)
+    await client.send_video(
+        chat_id=message.chat.id,
+        video=output_path,
+        caption=f"✂️ Sample clip from {start} to {end}"
+    )
+
+    # Cleanup
+    os.remove(input_path)
+    os.remove(output_path)
 
 print("🩸 MADARA FILE SHARE BOT is summoning forbidden chakra...")
 app.run()
