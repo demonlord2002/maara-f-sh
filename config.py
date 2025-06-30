@@ -1,14 +1,17 @@
+# config.py
+
 import os
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Convert comma-separated OWNER_IDS to list of ints
+# Owner(s) - comma-separated Telegram user IDs
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
 
-# NEW: Channel where files are saved (must be bot admin)
-DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))
+# File database channel (username or channel ID with -100 prefix)
+DB_CHANNEL_ID = os.getenv("-1002718440283")  # e.g., "madara_db_test" or "-1001234567890"
