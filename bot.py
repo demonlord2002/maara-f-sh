@@ -2,7 +2,7 @@
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-import os, json, time, re
+import os, json, time, re, subprocess
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -175,7 +175,7 @@ async def save_file(client, message: Message):
     link = f"https://t.me/{bot_username}?start={file_id}"
     await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
 
-# /sample command with fallback if fast trim fails
+# /sample command with subprocess error handling
 @app.on_message(filters.private & filters.command("sample") & filters.reply)
 async def sample_video(client, message: Message):
     if not is_active(message.from_user.id):
@@ -198,19 +198,35 @@ async def sample_video(client, message: Message):
     await message.reply("📥 Downloading video...")
     await replied.download(file_name=input_path)
 
+    if not os.path.exists(input_path):
+        return await message.reply("❌ Download failed. Couldn't find input video.")
+
     await message.reply("✂️ Trimming sample video...")
     duration = _get_duration_seconds(start_time, end_time)
 
-    fast_cmd = f"ffmpeg -y -ss {start_time} -i {input_path} -t {duration} -c copy -avoid_negative_ts make_zero -preset ultrafast {output_path}"
-    result = os.system(fast_cmd)
-
-    if result != 0 or not os.path.exists(output_path):
+    try:
+        subprocess.run(
+            f"ffmpeg -y -ss {start_time} -i {input_path} -t {duration} -c copy -avoid_negative_ts make_zero -preset ultrafast {output_path}",
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+    except subprocess.CalledProcessError as e:
         await message.reply("⚠️ Fast trim failed, retrying with safe mode...")
-        slow_cmd = f"ffmpeg -y -ss {start_time} -i {input_path} -t {duration} -c:v libx264 -c:a aac -preset fast {output_path}"
-        result = os.system(slow_cmd)
+        try:
+            subprocess.run(
+                f"ffmpeg -y -ss {start_time} -i {input_path} -t {duration} -c:v libx264 -c:a aac -preset fast {output_path}",
+                shell=True,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+        except subprocess.CalledProcessError as e:
+            return await message.reply(f"❌ Failed to generate sample.\nError: `{e.stderr.decode().strip()}`")
 
-    if result != 0 or not os.path.exists(output_path):
-        return await message.reply("❌ Failed to generate sample. Please check the timestamp format.")
+    if not os.path.exists(output_path):
+        return await message.reply("❌ Sample file missing after processing.")
 
     await message.reply("📤 Uploading sample...")
     await client.send_video(
