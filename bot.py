@@ -1,55 +1,50 @@
-# ✅ Madara Uchiha File Share Bot (Ubuntu VPS version)
+# ✅ Madara Uchiha File Share Bot with MongoDB
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-import os, json, time, re, asyncio, subprocess
+from pymongo import MongoClient
+import os, time, re, asyncio, subprocess
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load .env variables
 load_dotenv()
 
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
-DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")  # username or numeric
+DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")  # e.g. "madara_db_test" or -100xxxx
+MONGO_URL = os.getenv("MONGO_URL")  # Your MongoDB connection string
 
-DB_FILE = "db.json"
-USERS_FILE = "users.json"
-
-# Create files if not exist
-for file in [DB_FILE, USERS_FILE]:
-    if not os.path.exists(file):
-        with open(file, "w") as f:
-            json.dump({}, f)
-
-# Load data
-with open(DB_FILE, "r") as f:
-    db = json.load(f)
-with open(USERS_FILE, "r") as f:
-    allowed_users = json.load(f)
+# Init Mongo
+mongo = MongoClient(MONGO_URL)
+db = mongo["madara_bot"]
+files_col = db["files"]
+users_col = db["users"]
 
 app = Client("madara_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Helper functions
+# Check user access
 def is_active(user_id):
     if user_id in OWNER_IDS:
         return True
-    expiry = allowed_users.get(str(user_id))
-    return expiry and time.time() < expiry
+    u = users_col.find_one({"_id": user_id})
+    return u and u.get("expires", 0) > time.time()
 
+# Calculate duration
 def get_duration_seconds(start, end):
     def to_sec(t): return sum(x * int(t) for x, t in zip([3600, 60, 1], t.split(":")))
     return to_sec(end) - to_sec(start)
 
+# /start
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     args = message.text.split()
     if len(args) == 2:
         file_id = args[1]
-        if file_id in db:
-            file_info = db[file_id]
-            await client.copy_message(chat_id=message.chat.id, from_chat_id=file_info["chat_id"], message_id=file_info["msg_id"])
+        data = files_col.find_one({"_id": file_id})
+        if data:
+            await client.copy_message(chat_id=message.chat.id, from_chat_id=data["chat_id"], message_id=data["msg_id"])
         else:
             await message.reply("❌ File not found or expired.")
     else:
@@ -61,32 +56,20 @@ async def start_cmd(client, message: Message):
             "⏳ Use /status to check your plan time."
         )
 
+# /status
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
     user_id = message.from_user.id
-    expiry = allowed_users.get(str(user_id))
-    if not expiry:
+    data = users_col.find_one({"_id": user_id})
+    if not data:
         return await message.reply("⛔ No active plan. Contact @Madara_Uchiha_lI")
-    remaining = expiry - time.time()
+    remaining = data["expires"] - time.time()
     if remaining <= 0:
         return await message.reply("⚠️ Plan expired. Contact @Madara_Uchiha_lI")
     d, h, m = int(remaining // 86400), int((remaining % 86400) // 3600), int((remaining % 3600) // 60)
     await message.reply(f"🔥 Active Plan: {d}d {h}h {m}m")
 
-@app.on_message(filters.private & filters.command("help"))
-async def help_cmd(client, message: Message):
-    await message.reply(
-        "**🩸 Madara Uchiha File Share Bot — Help Menu**\n\n"
-        "📌 Send any file to receive a private shareable link.\n"
-        "✂️ `/sample HH:MM:SS to HH:MM:SS` — reply to a video to cut a short sample.\n"
-        "⏳ `/status` — check your remaining plan time.\n"
-        "👤 `/addusers <user_id>` — (owner only) add new user\n"
-        "❌ `/delusers <user_id>` — (owner only) remove user\n"
-        "📢 `/broadcast <message>` — (owner only) broadcast message to all users\n"
-        "📍 `/getusers` — (owner only) list of all users\n"
-        "\nOnly Uchiha-blessed users can use secret file share powers 🔥"
-    )
-
+# /addusers
 @app.on_message(filters.private & filters.command("addusers"))
 async def add_user(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -94,12 +77,11 @@ async def add_user(client, message: Message):
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
         return await message.reply("⚠️ Usage: /addusers <user_id>")
-    new_user = parts[1]
-    allowed_users[new_user] = time.time() + 28 * 86400
-    with open(USERS_FILE, "w") as f:
-        json.dump(allowed_users, f)
-    await message.reply(f"✅ {new_user} granted 28 days of power.")
+    uid = int(parts[1])
+    users_col.update_one({"_id": uid}, {"$set": {"expires": time.time() + 28 * 86400}}, upsert=True)
+    await message.reply(f"✅ {uid} granted 28 days of power.")
 
+# /delusers
 @app.on_message(filters.private & filters.command("delusers"))
 async def del_user(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -107,51 +89,71 @@ async def del_user(client, message: Message):
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
         return await message.reply("⚠️ Usage: /delusers <user_id>")
-    del_user = parts[1]
-    if del_user in allowed_users:
-        del allowed_users[del_user]
-        with open(USERS_FILE, "w") as f:
-            json.dump(allowed_users, f)
-        await message.reply(f"✅ {del_user} removed.")
+    users_col.delete_one({"_id": int(parts[1])})
+    await message.reply(f"✅ {parts[1]} removed.")
 
+# /getusers
 @app.on_message(filters.command("getusers") & filters.private)
 async def get_users(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Not allowed.")
-    if not allowed_users:
-        return await message.reply("⚠️ No users.")
-    msg = "**👤 Uchiha Sharing Squad:**\n\n"
-    msg += "\n".join([f"- `{uid}` [Click](tg://user?id={uid})" for uid in allowed_users])
-    await message.reply(msg, disable_web_page_preview=True)
-
-@app.on_message(filters.command("broadcast") & filters.private)
-async def broadcast(client, message):
-    if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Forbidden.")
-    text = message.text.split(" ", 1)
-    if len(text) < 2:
-        return await message.reply("❗ Usage: /broadcast Your message")
+    users = users_col.find()
+    text = "**👤 Uchiha Sharing Squad:**\n\n"
+    for u in users:
+        text += f"- `{u['_id']}` — [Click](tg://user?id={u['_id']})\n"
+    await message.reply(text, disable_web_page_preview=True)
+
+# /broadcast
+@app.on_message(filters.command("broadcast") & filters.private)
+async def broadcast_handler(client, message: Message):
+    if message.from_user.id not in OWNER_IDS:
+        return await message.reply("❌ Only Madara can shout to the Shinobi world.")
+    
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return await message.reply("⚠️ Usage: `/broadcast your message here`", parse_mode="Markdown")
+    
     sent, failed = 0, 0
-    for uid in allowed_users:
+    for user_id in allowed_users:
         try:
-            await client.send_message(int(uid), text[1])
+            await client.send_message(int(user_id), parts[1])
             sent += 1
         except:
             failed += 1
-    await message.reply(f"📢 Broadcast Done\n✅ Sent: {sent}\n❌ Failed: {failed}")
+    await message.reply(f"📢 Broadcast Completed!\n✅ Sent: {sent}\n❌ Failed: {failed}")
 
+@app.on_message(filters.command("help") & filters.private)
+async def help_cmd(client, message: Message):
+    if not is_active(message.from_user.id):
+        return await message.reply("🚫 You are not a recognized Uchiha warrior.\n💬 Contact @Madara_Uchiha_lI to unlock your power.")
+
+    await message.reply(
+        "**🩸 MADARA UCHIHA - COMMAND SCROLL ⚔️**\n\n"
+        "**👤 USER COMMANDS:**\n"
+        "🧿 `/start` – Access shared files using links\n"
+        "⏳ `/status` – Check your remaining plan time\n"
+        "📎 *Send a file* – Get a secret sharing link\n"
+        "✂️ `/sample HH:MM:SS to HH:MM:SS` – Trim sample from replied video\n\n"
+        "**👑 OWNER COMMANDS:**\n"
+        "👥 `/addusers <id>` – Grant 28 days access\n"
+        "🚫 `/delusers <id>` – Revoke a user\n"
+        "📜 `/getusers` – Show all allowed users\n"
+        "📢 `/broadcast <msg>` – DM all active users\n\n"
+        "🔐 *Only true Uchihas can rule the darkness.*"
+    )
+
+# File upload with MongoDB storage
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     if not is_active(message.from_user.id):
-        return await message.reply("🚫 You need a plan. Contact @Madara_Uchiha_lI")
+        return await message.reply("🚫 Plan expired. Contact @Madara_Uchiha_lI")
     file_id = str(message.id)
     saved = await message.copy(chat_id=DB_CHANNEL_ID)
-    db[file_id] = {"chat_id": DB_CHANNEL_ID, "msg_id": saved.id}
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f)
+    files_col.update_one({"_id": file_id}, {"$set": {"chat_id": DB_CHANNEL_ID, "msg_id": saved.id}}, upsert=True)
     link = f"https://t.me/{(await app.get_me()).username}?start={file_id}"
     await message.reply(f"✅ File sealed!\n📎 Link: {link}")
 
+# /sample
 @app.on_message(filters.command("sample") & filters.private)
 async def sample_trim(client, message: Message):
     if not message.reply_to_message or not (
@@ -211,6 +213,6 @@ async def sample_trim(client, message: Message):
     # Cleanup
     os.remove(input_path)
     os.remove(output_path)
-
-print("🩸 MADARA FILE SHARE BOT is summoning forbidden chakra...")
+    
+print("🩸 MADARA FILE SHARE BOT with MongoDB is summoning forbidden chakra...")
 app.run()
