@@ -175,7 +175,7 @@ async def save_file(client, message: Message):
     link = f"https://t.me/{bot_username}?start={file_id}"
     await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
 
-# /sample command with subprocess error handling
+# /sample command with fixed downloader
 @app.on_message(filters.private & filters.command("sample") & filters.reply)
 async def sample_video(client, message: Message):
     if not is_active(message.from_user.id):
@@ -192,30 +192,23 @@ async def sample_video(client, message: Message):
     start_time = match.group(1)
     end_time = match.group(2)
 
-    input_path = f"{replied.video.file_unique_id if replied.video else replied.document.file_unique_id}.mp4"
-    output_path = f"sample_{input_path}"
-
     await message.reply("📥 Downloading video...")
 
     try:
-        await replied.download(file_name=input_path)
+        input_path = await replied.download()
+        if not input_path:
+            return await message.reply("❌ Failed to download video.")
     except Exception as e:
         return await message.reply(f"❌ Failed to download: `{str(e)}`")
 
-    for _ in range(10):
-        if os.path.exists(input_path):
-            break
-        await asyncio.sleep(0.5)
-
-    if not os.path.exists(input_path):
-        return await message.reply("❌ Download failed. File not saved properly.")
-
+    output_path = f"sample_{os.path.basename(input_path)}"
     await message.reply("✂️ Trimming sample video...")
+
     duration = _get_duration_seconds(start_time, end_time)
 
     try:
         subprocess.run(
-            f"ffmpeg -y -ss {start_time} -i {input_path} -t {duration} -c copy -avoid_negative_ts make_zero -preset ultrafast {output_path}",
+            f"ffmpeg -y -ss {start_time} -i '{input_path}' -t {duration} -c copy -avoid_negative_ts make_zero -preset ultrafast '{output_path}'",
             shell=True,
             check=True,
             stdout=subprocess.PIPE,
@@ -225,7 +218,7 @@ async def sample_video(client, message: Message):
         await message.reply("⚠️ Fast trim failed, retrying with safe mode...")
         try:
             subprocess.run(
-                f"ffmpeg -y -ss {start_time} -i {input_path} -t {duration} -c:v libx264 -c:a aac -preset fast {output_path}",
+                f"ffmpeg -y -ss {start_time} -i '{input_path}' -t {duration} -c:v libx264 -c:a aac -preset fast '{output_path}'",
                 shell=True,
                 check=True,
                 stdout=subprocess.PIPE,
