@@ -152,7 +152,7 @@ async def save_file(client, message: Message):
     link = f"https://t.me/{(await app.get_me()).username}?start={file_id}"
     await message.reply(f"✅ File sealed!\n📎 Link: {link}")
 
-@app.on_message(filters.command("/sample") & filters.private)
+@app.on_message(filters.command("sample") & filters.private)
 async def sample_trim(client, message: Message):
     if not message.reply_to_message or not (message.reply_to_message.video or message.reply_to_message.document):
         return await message.reply("⚠️ Please reply to a video file with:\n/sample HH:MM:SS to HH:MM:SS")
