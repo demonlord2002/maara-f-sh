@@ -54,8 +54,8 @@ async def start_cmd(client, message: Message):
             await message.reply("❌ File not found or expired.")
     else:
         await message.reply(
-            "**🍘 Madara Uchiha File Share Bot**\n\n"
-            "Drop your files like a shinobi, share like a legend 🚀\n"
+            "**🩸 Madara Uchiha File Share Bot**\n\n"
+            "Drop your files like a shinobi, share like a legend 💀\n"
             "Only Uchiha-blessed users can create secret links.\n\n"
             "📌 Send any file to receive a private sharing link.\n"
             "⏳ Use /status to check your plan time."
@@ -168,15 +168,15 @@ async def save_file(client, message: Message):
     link = f"https://t.me/{bot_username}?start={file_id}"
     await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
 
-# /sample command
+# /sample command with support for video + document
 @app.on_message(filters.private & filters.command("sample") & filters.reply)
 async def sample_video(client, message: Message):
     if not is_active(message.from_user.id):
         return await message.reply("🚫 You are not authorized to use this feature.")
 
     replied = message.reply_to_message
-    if not replied.video:
-        return await message.reply("⚠️ Please reply to a video with `/sample HH:MM:SS to HH:MM:SS`")
+    if not (replied.video or (replied.document and replied.document.mime_type.startswith("video"))):
+        return await message.reply("⚠️ Please reply to a video or video file with `/sample HH:MM:SS to HH:MM:SS`")
 
     match = re.search(r"/sample (\d{1,2}:\d{2}:\d{2}) to (\d{1,2}:\d{2}:\d{2})", message.text)
     if not match:
@@ -185,7 +185,7 @@ async def sample_video(client, message: Message):
     start_time = match.group(1)
     end_time = match.group(2)
 
-    input_path = f"{replied.video.file_unique_id}.mp4"
+    input_path = f"{replied.video.file_unique_id if replied.video else replied.document.file_unique_id}.mp4"
     output_path = f"sample_{input_path}"
 
     await message.reply("📥 Downloading video...")
@@ -209,5 +209,5 @@ async def sample_video(client, message: Message):
     os.remove(input_path)
     os.remove(output_path)
 
-print("🍘 MADARA FILE SHARE BOT is summoning forbidden chakra...")
+print("🩸 MADARA FILE SHARE BOT is summoning forbidden chakra...")
 app.run()
