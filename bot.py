@@ -2,7 +2,7 @@
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-import os, json, time, re, subprocess, asyncio
+import os, json, time, re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,6 +10,7 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
+DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))  # Private channel ID
 
 DB_FILE = "db.json"
 USERS_FILE = "users.json"
@@ -28,21 +29,12 @@ with open(USERS_FILE, "r") as f:
 
 app = Client("madara_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Function to check if user is active
+# Check access
 def is_active(user_id):
     if user_id in OWNER_IDS:
         return True
     expiry = allowed_users.get(str(user_id))
-    if not expiry:
-        return False
-    return time.time() < expiry
-
-# Helper to calculate duration in seconds
-def _get_duration_seconds(start, end):
-    def to_seconds(t):
-        h, m, s = map(int, t.split(":"))
-        return h * 3600 + m * 60 + s
-    return to_seconds(end) - to_seconds(start)
+    return expiry and time.time() < expiry
 
 # /start command
 @app.on_message(filters.private & filters.command("start"))
@@ -68,44 +60,40 @@ async def start_cmd(client, message: Message):
             "⏳ Use /status to check your plan time."
         )
 
-# /status command
+# /status
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
     user_id = message.from_user.id
     expiry = allowed_users.get(str(user_id))
     if not expiry:
-        await message.reply("⛔ You have no active plan.\nSpeak to @Madara_Uchiha_lI to unlock forbidden power.")
-        return
+        return await message.reply("⛔ You have no active plan.\nSpeak to @Madara_Uchiha_lI to unlock forbidden power.")
     remaining = expiry - time.time()
     if remaining <= 0:
         await message.reply("🩸 Your power has faded.\n⚠️ Plan expired. Contact @Madara_Uchiha_lI to reactivate.")
     else:
-        days = int(remaining // 86400)
-        hours = int((remaining % 86400) // 3600)
-        minutes = int((remaining % 3600) // 60)
-        await message.reply(f"🔥 Your Sharing Jutsu is active!\n⏱ Time left: {days}d {hours}h {minutes}m")
+        d = int(remaining // 86400)
+        h = int((remaining % 86400) // 3600)
+        m = int((remaining % 3600) // 60)
+        await message.reply(f"🔥 Your Sharing Jutsu is active!\n⏱ Time left: {d}d {h}h {m}m")
 
-# /addusers command
+# /addusers
 @app.on_message(filters.private & filters.command("addusers"))
 async def add_user(client, message: Message):
-    user_id = message.from_user.id
-    if user_id not in OWNER_IDS:
+    if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Only Madara can add warriors.")
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
         return await message.reply("⚠️ Usage: /addusers <telegram_user_id>")
     new_user = parts[1]
-    expiry_time = time.time() + 28 * 86400
-    allowed_users[new_user] = expiry_time
+    allowed_users[new_user] = time.time() + 28 * 86400
     with open(USERS_FILE, "w") as f:
         json.dump(allowed_users, f)
     await message.reply(f"✅ Shinobi `{new_user}` granted 28 days of power.")
 
-# /delusers command
+# /delusers
 @app.on_message(filters.private & filters.command("delusers"))
 async def del_user(client, message: Message):
-    user_id = message.from_user.id
-    if user_id not in OWNER_IDS:
+    if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Only Madara can revoke access.")
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
@@ -118,19 +106,19 @@ async def del_user(client, message: Message):
         json.dump(allowed_users, f)
     await message.reply(f"✅ User `{del_user}` erased from access.")
 
-# /getusers command
+# /getusers
 @app.on_message(filters.command("getusers") & filters.private)
 async def get_users(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Forbidden scroll. Only Madara may open.")
     if not allowed_users:
         return await message.reply("⚠️ No shinobi recruited yet.")
-    user_list = "**👤 Uchiha Sharing Squad:**\n\n"
+    msg = "**👤 Uchiha Sharing Squad:**\n\n"
     for uid in allowed_users:
-        user_list += f"- `{uid}` — [Click Here](tg://user?id={uid})\n"
-    await message.reply(user_list, disable_web_page_preview=True)
+        msg += f"- `{uid}` — [Click](tg://user?id={uid})\n"
+    await message.reply(msg, disable_web_page_preview=True)
 
-# /help command
+# /help
 @app.on_message(filters.command("help") & filters.private)
 async def help_cmd(client, message: Message):
     await message.reply(
@@ -144,102 +132,35 @@ async def help_cmd(client, message: Message):
         "🔹 /sample HH:MM:SS to HH:MM:SS — Trim sample from replied video"
     )
 
-# /broadcast command
+# /broadcast
 @app.on_message(filters.command("broadcast") & filters.private)
 async def broadcast_handler(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Forbidden. You're not the ghost of Uchiha.")
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
+    if len(message.text.split(maxsplit=1)) < 2:
         return await message.reply("❗ Usage:\n/broadcast Your message here")
     sent, failed = 0, 0
     for user_id in allowed_users:
         try:
-            await client.send_message(int(user_id), parts[1])
+            await client.send_message(int(user_id), message.text.split(maxsplit=1)[1])
             sent += 1
         except:
             failed += 1
     await message.reply(f"📢 Message sent.\n✅ Success: {sent}\n❌ Failed: {failed}")
 
-# File upload handler
+# File upload with DB channel
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
-    user_id = message.from_user.id
-    if not is_active(user_id):
+    if not is_active(message.from_user.id):
         return await message.reply("🚫 Forbidden scroll upload attempt blocked.\nActivate your plan to use Sharingan Files.")
     file_id = str(message.id)
-    db[file_id] = {"chat_id": message.chat.id, "msg_id": message.id}
+    saved = await message.copy(chat_id=DB_CHANNEL_ID)
+    db[file_id] = {"chat_id": DB_CHANNEL_ID, "msg_id": saved.id}
     with open(DB_FILE, "w") as f:
         json.dump(db, f)
     bot_username = (await app.get_me()).username
     link = f"https://t.me/{bot_username}?start={file_id}"
     await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
-
-# /sample command with fixed downloader
-@app.on_message(filters.private & filters.command("sample") & filters.reply)
-async def sample_video(client, message: Message):
-    if not is_active(message.from_user.id):
-        return await message.reply("🚫 You are not authorized to use this feature.")
-
-    replied = message.reply_to_message
-    if not (replied.video or (replied.document and replied.document.mime_type.startswith("video"))):
-        return await message.reply("⚠️ Please reply to a video or video file with `/sample HH:MM:SS to HH:MM:SS`")
-
-    match = re.search(r"/sample (\d{1,2}:\d{2}:\d{2}) to (\d{1,2}:\d{2}:\d{2})", message.text)
-    if not match:
-        return await message.reply("⚠️ Incorrect format.\nUse: `/sample HH:MM:SS to HH:MM:SS`")
-
-    start_time = match.group(1)
-    end_time = match.group(2)
-
-    await message.reply("📥 Downloading video...")
-
-    try:
-        input_path = await replied.download()
-        if not input_path:
-            return await message.reply("❌ Failed to download video.")
-    except Exception as e:
-        return await message.reply(f"❌ Failed to download: `{str(e)}`")
-
-    output_path = f"sample_{os.path.basename(input_path)}"
-    await message.reply("✂️ Trimming sample video...")
-
-    duration = _get_duration_seconds(start_time, end_time)
-
-    try:
-        subprocess.run(
-            f"ffmpeg -y -ss {start_time} -i '{input_path}' -t {duration} -c copy -avoid_negative_ts make_zero -preset ultrafast '{output_path}'",
-            shell=True,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-    except subprocess.CalledProcessError as e:
-        await message.reply("⚠️ Fast trim failed, retrying with safe mode...")
-        try:
-            subprocess.run(
-                f"ffmpeg -y -ss {start_time} -i '{input_path}' -t {duration} -c:v libx264 -c:a aac -preset fast '{output_path}'",
-                shell=True,
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-        except subprocess.CalledProcessError as e:
-            return await message.reply(f"❌ Failed to generate sample.\nError: `{e.stderr.decode().strip()}`")
-
-    if not os.path.exists(output_path):
-        return await message.reply("❌ Sample file missing after processing.")
-
-    await message.reply("📤 Uploading sample...")
-    await client.send_video(
-        chat_id=message.chat.id,
-        video=output_path,
-        caption=f"🎞️ Sample from {start_time} to {end_time}",
-        supports_streaming=True
-    )
-
-    os.remove(input_path)
-    os.remove(output_path)
 
 print("🩸 MADARA FILE SHARE BOT is summoning forbidden chakra...")
 app.run()
