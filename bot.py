@@ -170,10 +170,7 @@ async def sample_trim(client, message: Message):
     file = await message.reply_to_message.download()
 
     output = "sample_clip.mp4"
-    cmd = [
-    "ffmpeg", "-ss", start, "-i", file_path, "-t", str(duration),
-    "-c", "copy", output, "-y"
-    ]
+    cmd = [ "ffmpeg", "-ss", start, "-i", file_path, "-t", str(duration), "-c", "copy", output, "-y" ]
     process = await asyncio.create_subprocess_exec(*cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     await process.communicate()
 
