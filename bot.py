@@ -37,6 +37,13 @@ def is_active(user_id):
         return False
     return time.time() < expiry
 
+# Helper to calculate duration in seconds
+def _get_duration_seconds(start, end):
+    def to_seconds(t):
+        h, m, s = map(int, t.split(":"))
+        return h * 3600 + m * 60 + s
+    return to_seconds(end) - to_seconds(start)
+
 # /start command
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
@@ -168,7 +175,7 @@ async def save_file(client, message: Message):
     link = f"https://t.me/{bot_username}?start={file_id}"
     await message.reply(f"✅ File sealed successfully!\n📎 Link: {link}")
 
-# /sample command with support for video + document
+# /sample command with fallback if fast trim fails
 @app.on_message(filters.private & filters.command("sample") & filters.reply)
 async def sample_video(client, message: Message):
     if not is_active(message.from_user.id):
@@ -192,8 +199,15 @@ async def sample_video(client, message: Message):
     await replied.download(file_name=input_path)
 
     await message.reply("✂️ Trimming sample video...")
-    duration_cmd = f"ffmpeg -y -i {input_path} -ss {start_time} -to {end_time} -c copy {output_path}"
-    result = os.system(duration_cmd)
+    duration = _get_duration_seconds(start_time, end_time)
+
+    fast_cmd = f"ffmpeg -y -ss {start_time} -i {input_path} -t {duration} -c copy -avoid_negative_ts make_zero -preset ultrafast {output_path}"
+    result = os.system(fast_cmd)
+
+    if result != 0 or not os.path.exists(output_path):
+        await message.reply("⚠️ Fast trim failed, retrying with safe mode...")
+        slow_cmd = f"ffmpeg -y -ss {start_time} -i {input_path} -t {duration} -c:v libx264 -c:a aac -preset fast {output_path}"
+        result = os.system(slow_cmd)
 
     if result != 0 or not os.path.exists(output_path):
         return await message.reply("❌ Failed to generate sample. Please check the timestamp format.")
