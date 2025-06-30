@@ -2,7 +2,7 @@
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-import os, json, time, re, subprocess
+import os, json, time, re, subprocess, asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -196,10 +196,19 @@ async def sample_video(client, message: Message):
     output_path = f"sample_{input_path}"
 
     await message.reply("📥 Downloading video...")
-    await replied.download(file_name=input_path)
+
+    try:
+        await replied.download(file_name=input_path)
+    except Exception as e:
+        return await message.reply(f"❌ Failed to download: `{str(e)}`")
+
+    for _ in range(10):
+        if os.path.exists(input_path):
+            break
+        await asyncio.sleep(0.5)
 
     if not os.path.exists(input_path):
-        return await message.reply("❌ Download failed. Couldn't find input video.")
+        return await message.reply("❌ Download failed. File not saved properly.")
 
     await message.reply("✂️ Trimming sample video...")
     duration = _get_duration_seconds(start_time, end_time)
