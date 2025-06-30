@@ -9,3 +9,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Convert comma-separated OWNER_IDS to list of ints
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
+
+# NEW: Channel where files are saved (must be bot admin)
+DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))
