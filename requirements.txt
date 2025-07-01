@@ -1,5 +1,5 @@
 pyrogram==2.0.106
 tgcrypto
 python-dotenv
-pymongo[srv]
-
+pymongo
+dnspython>=2.1.0
