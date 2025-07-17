@@ -16,8 +16,8 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URL = os.getenv("MONGO_URL")
-DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))
-BOT_USERNAME = "SunsetOfMe"
+DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")
+BOT_USERNAME = "Madara_FSBot"
 
 # 🔗 DATABASE SETUP
 client = MongoClient(MONGO_URL)
