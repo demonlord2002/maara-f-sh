@@ -171,7 +171,7 @@ async def handle_batch_links(client, message: Message):
 
         last_msg_id = match.group(1)
         first_msg_id = state.get("first_msg_id")
-        bot_username = "SunsetOfMe"  # Your bot's username
+        bot_username = "Madara_FSBot"  # Your bot's username
 
         share_link = f"https://t.me/{bot_username}?start=batch_{first_msg_id}_{last_msg_id}"
         await message.reply(f"✅ Batch created successfully!\n\n📎 Share link:\n`{share_link}`", quote=True)
