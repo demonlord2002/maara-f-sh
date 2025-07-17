@@ -143,21 +143,21 @@ async def batch_cmd(client, message: Message):
         first = await client.listen(message.chat.id, filters=filters.text, timeout=60)
         first_link = first.text.strip()
 
-        match_first = re.search(r"t\.me/c/(\d+)/(\d+)", first_link)
+        match_first = re.search(r"t\.me/(c/)?([\w_]+)/(\d+)", first_link)
         if not match_first:
-            return await first.reply("❌ Invalid first link format. Use t.me/c/<channel_id>/<msg_id>")
+            return await first.reply("❌ Invalid link format. Please send a proper Telegram message link.")
 
-        first_msg_id = match_first.group(2)
+        first_msg_id = match_first.group(3)
 
         await first.reply("📥 Now give me the **last message link** from your batch channel.")
         last = await client.listen(message.chat.id, filters=filters.text, timeout=60)
         last_link = last.text.strip()
 
-        match_last = re.search(r"t\.me/c/(\d+)/(\d+)", last_link)
+        match_last = re.search(r"t\.me/(c/)?([\w_]+)/(\d+)", last_link)
         if not match_last:
-            return await last.reply("❌ Invalid last link format. Use t.me/c/<channel_id>/<msg_id>")
+            return await last.reply("❌ Invalid link format. Please send a proper Telegram message link.")
 
-        last_msg_id = match_last.group(2)
+        last_msg_id = match_last.group(3)
 
         bot_username = "SunsetOfMe"
         batch_link = f"https://t.me/{bot_username}?start=batch_{first_msg_id}_{last_msg_id}"
