@@ -5,6 +5,8 @@ from pymongo import MongoClient
 import os, time, re, asyncio, subprocess
 from dotenv import load_dotenv
 
+user_batch_state = {}  # To track user steps for /batch
+
 # Load .env variables
 load_dotenv()
 
@@ -133,38 +135,50 @@ async def help_cmd(client, message: Message):
 
 @app.on_message(filters.command("batch") & filters.private)
 async def batch_cmd(client, message: Message):
-    if not is_active(message.from_user.id):
-        return await message.reply("❌ You are not allowed to use this command.")
+    user_id = message.from_user.id
 
-    await message.reply("📥 Give me the first message link from your batch channel.")
+    if not is_active(user_id):
+        return await message.reply("🚫 Plan expired. Contact @Madara_Uchiha_lI")
 
-    def check_link(msg):
-        return msg.chat.id == message.chat.id and msg.text and "/" in msg.text
+    user_batch_state[user_id] = {"step": "waiting_for_first_link"}
+    await message.reply("📥 Give me the **first message link** from your batch channel.")
+@app.on_message(filters.text & filters.private)
+async def handle_batch_links(client, message: Message):
+    user_id = message.from_user.id
 
-    try:
-        first = await client.listen(message.chat.id, filters=filters.text, timeout=60)
-        if not first.text or "/" not in first.text:
-            return await message.reply("❌ Invalid first message link.")
+    if user_id not in user_batch_state:
+        return
 
-        await message.reply("📥 Now give me the last message link from your batch channel.")
-        last = await client.listen(message.chat.id, filters=filters.text, timeout=60)
-        if not last.text or "/" not in last.text:
-            return await message.reply("❌ Invalid last message link.")
+    state = user_batch_state[user_id]
 
-        first_id = int(first.text.split("/")[-1])
-        last_id = int(last.text.split("/")[-1])
+    if state["step"] == "waiting_for_first_link":
+        first_link = message.text.strip()
+        match = re.search(r"(?:https?://)?t\.me/([\w_]+)/(\d+)", first_link)
+        if not match:
+            return await message.reply("❌ Invalid first link format. Send a proper message link like `https://t.me/channel/123`.")
 
-        links = []
-        for msg_id in range(first_id, last_id + 1):
-            links.append(f"https://t.me/{DB_CHANNEL_ID}/{msg_id}")
+        state["first_msg_id"] = match.group(2)
+        state["chat_username"] = match.group(1)
+        state["step"] = "waiting_for_last_link"
+        await message.reply("📥 Now give me the **last message link** from your batch channel.")
+        return
 
-        msg = await message.reply("🔗 Generating share message...")
-        text = "\n".join([f"📁 [Episode {i+1}]({url})" for i, url in enumerate(links)])
-        await msg.edit(f"**🔰 Batch Download Links:**\n\n{text}", disable_web_page_preview=True)
+    elif state["step"] == "waiting_for_last_link":
+        last_link = message.text.strip()
+        match = re.search(r"(?:https?://)?t\.me/[\w_]+/(\d+)", last_link)
+        if not match:
+            return await message.reply("❌ Invalid last link format. Send a proper message link like `https://t.me/channel/123`.")
 
-    except asyncio.TimeoutError:
-        await message.reply("⏰ Timeout. Please try again.")
+        last_msg_id = match.group(1)
+        first_msg_id = state.get("first_msg_id")
+        bot_username = "SunsetOfMe"  # Your bot's username
 
+        share_link = f"https://t.me/{bot_username}?start=batch_{first_msg_id}_{last_msg_id}"
+        await message.reply(f"✅ Batch created successfully!\n\n📎 Share link:\n`{share_link}`", quote=True)
+
+        # Clean up
+        user_batch_state.pop(user_id, None)
+        
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     if not is_active(message.from_user.id):
