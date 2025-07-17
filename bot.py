@@ -18,7 +18,7 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
-DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))
+DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")
 
 # MongoDB setup
 client = MongoClient(MONGO_URI)
