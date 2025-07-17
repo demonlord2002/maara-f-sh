@@ -36,7 +36,6 @@ def get_duration_seconds(start, end):
     def to_sec(t): return sum(x * int(t) for x, t in zip([3600, 60, 1], t.split(":")))
     return to_sec(end) - to_sec(start)
 
-# /start
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     args = message.text.split()
@@ -56,7 +55,6 @@ async def start_cmd(client, message: Message):
             "⏳ Use /status to check your plan time."
         )
 
-# /status
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
     user_id = message.from_user.id
@@ -69,7 +67,6 @@ async def status_cmd(client, message: Message):
     d, h, m = int(remaining // 86400), int((remaining % 86400) // 3600), int((remaining % 3600) // 60)
     await message.reply(f"🔥 Active Plan: {d}d {h}h {m}m")
 
-# /addusers
 @app.on_message(filters.private & filters.command("addusers"))
 async def add_user(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -81,7 +78,6 @@ async def add_user(client, message: Message):
     users_col.update_one({"_id": uid}, {"$set": {"expires": time.time() + 28 * 86400}}, upsert=True)
     await message.reply(f"✅ {uid} granted 28 days of power.")
 
-# /delusers
 @app.on_message(filters.private & filters.command("delusers"))
 async def del_user(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -92,7 +88,6 @@ async def del_user(client, message: Message):
     users_col.delete_one({"_id": int(parts[1])})
     await message.reply(f"✅ {parts[1]} removed.")
 
-# /getusers
 @app.on_message(filters.command("getusers") & filters.private)
 async def get_users(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
@@ -103,20 +98,19 @@ async def get_users(client, message: Message):
         text += f"- `{u['_id']}` — [Click](tg://user?id={u['_id']})\n"
     await message.reply(text, disable_web_page_preview=True)
 
-# /broadcast
 @app.on_message(filters.command("broadcast") & filters.private)
 async def broadcast_handler(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Only Madara can shout to the Shinobi world.")
-    
+
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         return await message.reply("⚠️ Usage: `/broadcast your message here`", parse_mode="Markdown")
-    
+
     sent, failed = 0, 0
-    for user_id in allowed_users:
+    for user in users_col.find():
         try:
-            await client.send_message(int(user_id), parts[1])
+            await client.send_message(int(user['_id']), parts[1])
             sent += 1
         except:
             failed += 1
@@ -133,7 +127,8 @@ async def help_cmd(client, message: Message):
         "🧿 `/start` – Access shared files using links\n"
         "⏳ `/status` – Check your remaining plan time\n"
         "📎 *Send a file* – Get a secret sharing link\n"
-        "✂️ `/sample HH:MM:SS to HH:MM:SS` – Trim sample from replied video\n\n"
+        "✂️ `/sample HH:MM:SS to HH:MM:SS` – Trim sample from replied video\n"
+        "📚 `/batch` – Share a full batch from channel\n\n"
         "**👑 OWNER COMMANDS:**\n"
         "👥 `/addusers <id>` – Grant 28 days access\n"
         "🚫 `/delusers <id>` – Revoke a user\n"
@@ -142,7 +137,6 @@ async def help_cmd(client, message: Message):
         "🔐 *Only true Uchihas can rule the darkness.*"
     )
 
-# File upload with MongoDB storage
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     if not is_active(message.from_user.id):
@@ -153,7 +147,6 @@ async def save_file(client, message: Message):
     link = f"https://t.me/{(await app.get_me()).username}?start={file_id}"
     await message.reply(f"✅ File sealed!\n📎 Link: {link}")
 
-# /sample
 @app.on_message(filters.command("sample") & filters.private)
 async def sample_trim(client, message: Message):
     if not message.reply_to_message or not (
@@ -179,7 +172,6 @@ async def sample_trim(client, message: Message):
 
     output_path = "sample_clip.mp4"
 
-    # Try fast trim first (copy mode)
     await msg.edit("✂️ Trimming sample video (fast mode)...")
     fast_cmd = [
         "ffmpeg", "-ss", start, "-i", input_path, "-t", str(duration),
@@ -188,7 +180,6 @@ async def sample_trim(client, message: Message):
     process = await asyncio.create_subprocess_exec(*fast_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     await process.communicate()
 
-    # If fast mode fails, fallback to re-encode
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         await msg.edit("⚠️ Fast trim failed, retrying with safe mode...")
         slow_cmd = [
@@ -198,7 +189,6 @@ async def sample_trim(client, message: Message):
         process = await asyncio.create_subprocess_exec(*slow_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         await process.communicate()
 
-    # Final check and send
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         os.remove(input_path)
         return await msg.edit("❌ Failed to generate sample. Please check the video format.")
@@ -210,9 +200,27 @@ async def sample_trim(client, message: Message):
         caption=f"✂️ Sample clip from {start} to {end}"
     )
 
-    # Cleanup
     os.remove(input_path)
     os.remove(output_path)
-    
+
+@app.on_message(filters.command("batch") & filters.private)
+async def batch_share(client, message: Message):
+    if not is_active(message.from_user.id):
+        return await message.reply("🚫 Plan expired. Contact @Madara_Uchiha_lI")
+
+    await message.reply("📥 Please FORWARD first and last messages from your batch channel (with forward tag).")
+
+    first_msg = await client.listen(message.chat.id, filters.forwarded)
+    last_msg = await client.listen(message.chat.id, filters.forwarded)
+
+    if not (first_msg.forward_from_chat and last_msg.forward_from_chat):
+        return await message.reply("❌ Please forward messages from a public channel with forward tag enabled.")
+
+    batch_id = str(first_msg.id)
+    files_col.update_one({"_id": batch_id}, {"$set": {"chat_id": first_msg.forward_from_chat.id, "msg_id": first_msg.id, "end_id": last_msg.id}}, upsert=True)
+
+    link = f"https://t.me/{(await app.get_me()).username}?start={batch_id}"
+    await message.reply(f"✅ Batch sealed!\n📎 Share Link: {link}")
+
 print("🩸 MADARA FILE SHARE BOT with MongoDB is summoning forbidden chakra...")
 app.run()
