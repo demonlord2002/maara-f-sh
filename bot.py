@@ -13,10 +13,9 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
-DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")  # e.g. "madara_db_test" or -100xxxx
-MONGO_URL = os.getenv("MONGO_URL")  # Your MongoDB connection string
+DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))
+MONGO_URL = os.getenv("MONGO_URL")
 
-# Init Mongo
 mongo = MongoClient(MONGO_URL)
 db = mongo["madara_bot"]
 files_col = db["files"]
@@ -31,7 +30,6 @@ def is_active(user_id):
     u = users_col.find_one({"_id": user_id})
     return u and u.get("expires", 0) > time.time()
 
-# Calculate duration
 def get_duration_seconds(start, end):
     def to_sec(t): return sum(x * int(t) for x, t in zip([3600, 60, 1], t.split(":")))
     return to_sec(end) - to_sec(start)
@@ -73,7 +71,7 @@ async def add_user(client, message: Message):
         return await message.reply("❌ Only Madara can add warriors.")
     parts = message.text.split()
     if len(parts) != 2 or not parts[1].isdigit():
-        return await message.reply("⚠️ Usage: /addusers <user_id>")
+        return await message.reply("⚠️ Usage:/addusers <user_id>")
     uid = int(parts[1])
     users_col.update_one({"_id": uid}, {"$set": {"expires": time.time() + 28 * 86400}}, upsert=True)
     await message.reply(f"✅ {uid} granted 28 days of power.")
@@ -95,18 +93,16 @@ async def get_users(client, message: Message):
     users = users_col.find()
     text = "**👤 Uchiha Sharing Squad:**\n\n"
     for u in users:
-        text += f"- `{u['_id']}` — [Click](tg://user?id={u['_id']})\n"
+        text += f"- {u['_id']} — [Click](tg://user?id={u['_id']})\n"
     await message.reply(text, disable_web_page_preview=True)
 
 @app.on_message(filters.command("broadcast") & filters.private)
 async def broadcast_handler(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Only Madara can shout to the Shinobi world.")
-
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        return await message.reply("⚠️ Usage: `/broadcast your message here`", parse_mode="Markdown")
-
+        return await message.reply("⚠️ Usage: /broadcast your message here")
     sent, failed = 0, 0
     for user in users_col.find():
         try:
@@ -120,20 +116,18 @@ async def broadcast_handler(client, message: Message):
 async def help_cmd(client, message: Message):
     if not is_active(message.from_user.id):
         return await message.reply("🚫 You are not a recognized Uchiha warrior.\n💬 Contact @Madara_Uchiha_lI to unlock your power.")
-
     await message.reply(
         "**🩸 MADARA UCHIHA - COMMAND SCROLL ⚔️**\n\n"
         "**👤 USER COMMANDS:**\n"
-        "🧿 `/start` – Access shared files using links\n"
-        "⏳ `/status` – Check your remaining plan time\n"
+        "🧿 /start – Access shared files using links\n"
+        "⏳ /status – Check your remaining plan time\n"
         "📎 *Send a file* – Get a secret sharing link\n"
-        "✂️ `/sample HH:MM:SS to HH:MM:SS` – Trim sample from replied video\n"
-        "📚 `/batch` – Share a full batch from channel\n\n"
+        "✂️ /sample HH:MM:SS to HH:MM:SS – Trim sample from replied video\n\n"
         "**👑 OWNER COMMANDS:**\n"
-        "👥 `/addusers <id>` – Grant 28 days access\n"
-        "🚫 `/delusers <id>` – Revoke a user\n"
-        "📜 `/getusers` – Show all allowed users\n"
-        "📢 `/broadcast <msg>` – DM all active users\n\n"
+        "👥 /addusers <id> – Grant 28 days access\n"
+        "🚫 /delusers <id> – Revoke a user\n"
+        "📜 /getusers – Show all allowed users\n"
+        "📢 /broadcast <msg> – DM all active users\n\n"
         "🔐 *Only true Uchihas can rule the darkness.*"
     )
 
@@ -167,25 +161,18 @@ async def sample_trim(client, message: Message):
 
     try:
         input_path = await message.reply_to_message.download()
-    except Exception as e:
+    except:
         return await msg.edit("❌ Download failed. File not saved properly.")
 
     output_path = "sample_clip.mp4"
-
     await msg.edit("✂️ Trimming sample video (fast mode)...")
-    fast_cmd = [
-        "ffmpeg", "-ss", start, "-i", input_path, "-t", str(duration),
-        "-c", "copy", output_path, "-y"
-    ]
+    fast_cmd = ["ffmpeg", "-ss", start, "-i", input_path, "-t", str(duration), "-c", "copy", output_path, "-y"]
     process = await asyncio.create_subprocess_exec(*fast_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     await process.communicate()
 
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         await msg.edit("⚠️ Fast trim failed, retrying with safe mode...")
-        slow_cmd = [
-            "ffmpeg", "-i", input_path, "-ss", start, "-t", str(duration),
-            "-c:v", "libx264", "-c:a", "aac", output_path, "-y"
-        ]
+        slow_cmd = ["ffmpeg", "-i", input_path, "-ss", start, "-t", str(duration), "-c:v", "libx264", "-c:a", "aac", output_path, "-y"]
         process = await asyncio.create_subprocess_exec(*slow_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         await process.communicate()
 
@@ -194,33 +181,10 @@ async def sample_trim(client, message: Message):
         return await msg.edit("❌ Failed to generate sample. Please check the video format.")
 
     await msg.edit("📤 Uploading sample...")
-    await client.send_video(
-        chat_id=message.chat.id,
-        video=output_path,
-        caption=f"✂️ Sample clip from {start} to {end}"
-    )
+    await client.send_video(chat_id=message.chat.id, video=output_path, caption=f"✂️ Sample clip from {start} to {end}")
 
     os.remove(input_path)
     os.remove(output_path)
-
-@app.on_message(filters.command("batch") & filters.private)
-async def batch_share(client, message: Message):
-    if not is_active(message.from_user.id):
-        return await message.reply("🚫 Plan expired. Contact @Madara_Uchiha_lI")
-
-    await message.reply("📥 Please FORWARD first and last messages from your batch channel (with forward tag).")
-
-    first_msg = await client.listen(message.chat.id, filters.forwarded)
-    last_msg = await client.listen(message.chat.id, filters.forwarded)
-
-    if not (first_msg.forward_from_chat and last_msg.forward_from_chat):
-        return await message.reply("❌ Please forward messages from a public channel with forward tag enabled.")
-
-    batch_id = str(first_msg.id)
-    files_col.update_one({"_id": batch_id}, {"$set": {"chat_id": first_msg.forward_from_chat.id, "msg_id": first_msg.id, "end_id": last_msg.id}}, upsert=True)
-
-    link = f"https://t.me/{(await app.get_me()).username}?start={batch_id}"
-    await message.reply(f"✅ Batch sealed!\n📎 Share Link: {link}")
 
 print("🩸 MADARA FILE SHARE BOT with MongoDB is summoning forbidden chakra...")
 app.run()
