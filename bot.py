@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pymongo import MongoClient
+from dotenv import load_dotenv
+load_dotenv()
 
 # 🩸 LOGGING SYSTEM
 logging.basicConfig(level=logging.INFO)
