@@ -1,5 +1,4 @@
-# ✅ Madara Uchiha File Share Bot with MongoDB
-
+# ✅ Madara Uchiha File Share Bot
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pymongo import MongoClient
@@ -13,7 +12,7 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
-DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")
+DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))
 MONGO_URL = os.getenv("MONGO_URL")
 
 mongo = MongoClient(MONGO_URL)
@@ -122,7 +121,8 @@ async def help_cmd(client, message: Message):
         "🧿 /start – Access shared files using links\n"
         "⏳ /status – Check your remaining plan time\n"
         "📎 *Send a file* – Get a secret sharing link\n"
-        "✂️ /sample HH:MM:SS to HH:MM:SS – Trim sample from replied video\n\n"
+        "✂️ /sample HH:MM:SS to HH:MM:SS – Trim sample from replied video\n"
+        "📦 /batch – Create a single share link from batch messages\n\n"
         "**👑 OWNER COMMANDS:**\n"
         "👥 /addusers <id> – Grant 28 days access\n"
         "🚫 /delusers <id> – Revoke a user\n"
@@ -130,7 +130,41 @@ async def help_cmd(client, message: Message):
         "📢 /broadcast <msg> – DM all active users\n\n"
         "🔐 *Only true Uchihas can rule the darkness.*"
     )
-    
+
+@app.on_message(filters.command("batch") & filters.private)
+async def batch_cmd(client, message: Message):
+    if not is_active(message.from_user.id):
+        return await message.reply("❌ You are not allowed to use this command.")
+
+    await message.reply("📥 Give me the first message link from your batch channel.")
+
+    def check_link(msg):
+        return msg.chat.id == message.chat.id and msg.text and "/" in msg.text
+
+    try:
+        first = await client.listen(message.chat.id, filters=filters.text, timeout=60)
+        if not first.text or "/" not in first.text:
+            return await message.reply("❌ Invalid first message link.")
+
+        await message.reply("📥 Now give me the last message link from your batch channel.")
+        last = await client.listen(message.chat.id, filters=filters.text, timeout=60)
+        if not last.text or "/" not in last.text:
+            return await message.reply("❌ Invalid last message link.")
+
+        first_id = int(first.text.split("/")[-1])
+        last_id = int(last.text.split("/")[-1])
+
+        links = []
+        for msg_id in range(first_id, last_id + 1):
+            links.append(f"https://t.me/{DB_CHANNEL_ID}/{msg_id}")
+
+        msg = await message.reply("🔗 Generating share message...")
+        text = "\n".join([f"📁 [Episode {i+1}]({url})" for i, url in enumerate(links)])
+        await msg.edit(f"**🔰 Batch Download Links:**\n\n{text}", disable_web_page_preview=True)
+
+    except asyncio.TimeoutError:
+        await message.reply("⏰ Timeout. Please try again.")
+
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     if not is_active(message.from_user.id):
@@ -166,7 +200,6 @@ async def sample_trim(client, message: Message):
 
     output_path = "sample_clip.mp4"
 
-    # Try fast trim first (copy mode)
     await msg.edit("✂️ Trimming sample video (fast mode)...")
     fast_cmd = [
         "ffmpeg", "-ss", start, "-i", input_path, "-t", str(duration),
@@ -175,7 +208,6 @@ async def sample_trim(client, message: Message):
     process = await asyncio.create_subprocess_exec(*fast_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     await process.communicate()
 
-    # If fast mode fails, fallback to re-encode
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         await msg.edit("⚠️ Fast trim failed, retrying with safe mode...")
         slow_cmd = [
@@ -185,7 +217,6 @@ async def sample_trim(client, message: Message):
         process = await asyncio.create_subprocess_exec(*slow_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         await process.communicate()
 
-    # Final check and send
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         os.remove(input_path)
         return await msg.edit("❌ Failed to generate sample. Please check the video format.")
@@ -197,7 +228,6 @@ async def sample_trim(client, message: Message):
         caption=f"✂️ Sample clip from {start} to {end}"
     )
 
-    # Cleanup
     os.remove(input_path)
     os.remove(output_path)
 
