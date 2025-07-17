@@ -200,28 +200,43 @@ async def sample_trim(client, message: Message):
 
     try:
         input_path = await message.reply_to_message.download()
-    except:
+    except Exception as e:
         return await msg.edit("❌ Download failed. File not saved properly.")
 
     output_path = "sample_clip.mp4"
+
+    # Try fast trim first (copy mode)
     await msg.edit("✂️ Trimming sample video (fast mode)...")
-    fast_cmd = ["ffmpeg", "-ss", start, "-i", input_path, "-t", str(duration), "-c", "copy", output_path, "-y"]
+    fast_cmd = [
+        "ffmpeg", "-ss", start, "-i", input_path, "-t", str(duration),
+        "-c", "copy", output_path, "-y"
+    ]
     process = await asyncio.create_subprocess_exec(*fast_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     await process.communicate()
 
+    # If fast mode fails, fallback to re-encode
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         await msg.edit("⚠️ Fast trim failed, retrying with safe mode...")
-        slow_cmd = ["ffmpeg", "-i", input_path, "-ss", start, "-t", str(duration), "-c:v", "libx264", "-c:a", "aac", output_path, "-y"]
+        slow_cmd = [
+            "ffmpeg", "-i", input_path, "-ss", start, "-t", str(duration),
+            "-c:v", "libx264", "-c:a", "aac", output_path, "-y"
+        ]
         process = await asyncio.create_subprocess_exec(*slow_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         await process.communicate()
 
+    # Final check and send
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         os.remove(input_path)
         return await msg.edit("❌ Failed to generate sample. Please check the video format.")
 
     await msg.edit("📤 Uploading sample...")
-    await client.send_video(chat_id=message.chat.id, video=output_path, caption=f"✂️ Sample clip from {start} to {end}")
+    await client.send_video(
+        chat_id=message.chat.id,
+        video=output_path,
+        caption=f"✂️ Sample clip from {start} to {end}"
+    )
 
+    # Cleanup
     os.remove(input_path)
     os.remove(output_path)
 
