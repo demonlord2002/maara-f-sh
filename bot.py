@@ -131,6 +131,45 @@ async def help_cmd(client, message: Message):
         "🔐 *Only true Uchihas can rule the darkness.*"
     )
 
+# /batch - Create a sharable batch link from channel posts
+@app.on_message(filters.command("batch") & filters.private)
+async def batch_cmd(client, message: Message):
+    if not is_active(message.from_user.id):
+        return await message.reply("🚫 Plan expired. Contact @Madara_Uchiha_lI")
+
+    await message.reply("📥 Give me the **first message link** from your batch channel.")
+
+    try:
+        first = await client.listen(message.chat.id, filters=filters.text, timeout=60)
+        first_link = first.text.strip()
+
+        match_first = re.search(r"t\.me/c/(\d+)/(\d+)", first_link)
+        if not match_first:
+            return await first.reply("❌ Invalid first link format. Use t.me/c/<channel_id>/<msg_id>")
+
+        first_msg_id = match_first.group(2)
+
+        await first.reply("📥 Now give me the **last message link** from your batch channel.")
+        last = await client.listen(message.chat.id, filters=filters.text, timeout=60)
+        last_link = last.text.strip()
+
+        match_last = re.search(r"t\.me/c/(\d+)/(\d+)", last_link)
+        if not match_last:
+            return await last.reply("❌ Invalid last link format. Use t.me/c/<channel_id>/<msg_id>")
+
+        last_msg_id = match_last.group(2)
+
+        bot_username = "SunsetOfMe"
+        batch_link = f"https://t.me/{bot_username}?start=batch_{first_msg_id}_{last_msg_id}"
+
+        await last.reply(
+            f"✅ Batch created successfully!\n📎 [Click here to view batch]({batch_link})",
+            disable_web_page_preview=True
+        )
+
+    except asyncio.TimeoutError:
+        await message.reply("⏳ Timeout. You didn’t reply in time.")
+    
 @app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
 async def save_file(client, message: Message):
     if not is_active(message.from_user.id):
