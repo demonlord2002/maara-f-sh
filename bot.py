@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 from datetime import datetime
 from asyncio import TimeoutError
 from asyncio import get_event_loop, wait_for
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+
 
 # Load .env variables
 load_dotenv()
@@ -42,7 +45,7 @@ def get_duration_seconds(start, end):
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     args = message.text.split()
-    
+
     if len(args) == 2:
         arg_value = args[1]
 
@@ -54,16 +57,17 @@ async def start_cmd(client, message: Message):
             
             start_id = batch_data["start_msg_id"]
             end_id = batch_data["end_msg_id"]
-            
+            db_channel = batch_data["db_channel"]  # Make sure to save this during /batch creation
+
             await message.reply(
-                f"📦 Sending your batch files (ID {start_id} to {end_id})...\nPlease wait..."
+                f"📦 Sending your batch files...\n🆔 From Message ID `{start_id}` to `{end_id}`\n⏳ Please wait..."
             )
 
             for msg_id in range(start_id, end_id + 1):
                 try:
                     await client.forward_messages(
                         chat_id=message.chat.id,
-                        from_chat_id="madara_db_test",  # Replace this with your real DB_CHANNEL ID
+                        from_chat_id="madara_db_test",  # Works with username like "madara_db_test"
                         message_ids=msg_id
                     )
                     await asyncio.sleep(1)
@@ -71,7 +75,7 @@ async def start_cmd(client, message: Message):
                     await message.reply(f"⚠️ Error sending file ID {msg_id}: {e}")
             return
 
-        # ✅ Single File Link Handling (Your Original Code)
+        # ✅ Single File Handling
         file_id = arg_value
         data = files_col.find_one({"_id": file_id})
         if data:
@@ -89,58 +93,68 @@ async def start_cmd(client, message: Message):
             "Drop your files like a shinobi, share like a legend 💀\n"
             "Only Uchiha-blessed users can create secret links.\n\n"
             "📌 Send any file to receive a private sharing link.\n"
-            "⏳ Use /status to check your plan time."
+            "🎞 Use `/batch` to create full episode shareable links.\n"
+            "⏳ Use `/status` to check your plan time."
         )
 
+
 @app.on_message(filters.private & filters.command("batch"))
-async def batch_handler(client, message: Message):
-    user_id = message.from_user.id
-    await message.reply_text("📌 Please reply to the message you want to batch-share.\nSend `cancel` to stop.", quote=True)
-
+async def batch_cmd(client, message):
+    await message.reply_text(
+        "📌 Please send the **first message link** (e.g., `https://t.me/channel_username/123`):",
+    )
     try:
-        reply_msg = await client.listen_for_reply(chat_id=message.chat.id, timeout=60)
-    except TimeoutError:
-        await message.reply("⏰ Timeout! You didn’t reply within 60 seconds.")
-        return
+        first_msg = await client.listen(message.chat.id, timeout=60)
+        if not first_msg.text:
+            return await message.reply("❌ Invalid input. Only links are accepted.")
 
-    if not reply_msg.reply_to_message:
-        await message.reply("❌ You must reply to a message to batch-share it.")
-        return
+        first_link = first_msg.text.strip()
 
-    replied = reply_msg.reply_to_message
+        await message.reply_text(
+            "✅ Got it!\nNow send the **last message link** (e.g., `https://t.me/channel_username/132`):"
+        )
 
-    if not replied.media:
-        await message.reply("❌ That’s not a file message.")
-        return
+        last_msg = await client.listen(message.chat.id, timeout=60)
+        if not last_msg.text:
+            return await message.reply("❌ Invalid input. Only links are accepted.")
 
-    # Save to MongoDB (assuming 'files_col' is your MongoDB collection)
-    file_id = str(replied.id)
-    files_col.insert_one({
-        "_id": file_id,
-        "chat_id": replied.chat.id,
-        "msg_id": replied.id,
-        "user_id": user_id
-    })
+        last_link = last_msg.text.strip()
 
-    share_link = f"https://t.me/{BOT_USERNAME}?start={file_id}"
-    await message.reply_text(f"✅ Batch file saved!\n\n🔗 Your shareable link:\n{share_link}")
+        # Extract info from links
+        first = re.findall(r"https://t\.me/(.+)/(\d+)", first_link)
+        last = re.findall(r"https://t\.me/(.+)/(\d+)", last_link)
 
-def listen_for_reply_once(client, chat_id, timeout=60):
-    loop = get_event_loop()
-    return wait_for(client.listen_once(chat_id), timeout=timeout)
+        if not first or not last or first[0][0] != last[0][0]:
+            return await message.reply("❌ Invalid links or channel mismatch.")
 
-def listen_once_patch(self, chat_id):
-    from pyrogram import filters
+        channel_username = first[0][0]
+        start_id = int(first[0][1])
+        end_id = int(last[0][1])
 
-    future = get_event_loop().create_future()
+        if end_id < start_id:
+            return await message.reply("❌ End ID cannot be less than Start ID.")
 
-    @self.on_message(filters.chat(chat_id) & filters.reply)
-    async def _listener(_, msg: Message):
-        if not future.done():
-            future.set_result(msg)
-            await _listener.stop()  # stop listening after one message
+        # Store batch in DB
+        batch_id = str(start_id) + "_" + str(end_id) + "_" + channel_username
+        files_col.insert_one({
+            "_id": batch_id,
+            "channel": channel_username,
+            "start_id": start_id,
+            "end_id": end_id,
+            "type": "batch"
+        })
 
-    return future
+        share_link = f"https://t.me/{BOT_USERNAME}?start={batch_id}"
+        await message.reply_text(
+            f"✅ Batch saved!\n\n📎 Your shareable link:\n`{share_link}`",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔥 Open Link", url=share_link)]
+            ])
+        )
+
+    except Exception as e:
+        await message.reply("⏰ Timeout or error occurred. Please try again.")
+
 
 # Patch into your Pyrogram client
 Client.listen_for_reply = listen_for_reply_once
