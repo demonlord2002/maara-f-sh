@@ -42,18 +42,11 @@ def get_duration_seconds(start, end):
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     args = message.text.split()
-    user_id = message.from_user.id
-
-    # If file_id is provided
     if len(args) == 2:
         file_id = args[1]
         data = files_col.find_one({"_id": file_id})
         if data:
-            await client.copy_message(
-                chat_id=message.chat.id,
-                from_chat_id=data["chat_id"],
-                message_id=data["msg_id"]
-            )
+            await client.copy_message(chat_id=message.chat.id, from_chat_id=data["chat_id"], message_id=data["msg_id"])
         else:
             await message.reply("❌ File not found or expired.")
     else:
