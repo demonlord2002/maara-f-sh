@@ -15,6 +15,9 @@ from pyrogram.errors import MessageNotModified
 import uuid
 
 
+# Store temporary batch sessions in memory
+batch_sessions = {}
+
 # Load .env variables
 load_dotenv()
 
@@ -100,46 +103,53 @@ async def start_cmd(client, message: Message):
 
 
 @app.on_message(filters.private & filters.command("batch"))
-async def batch_handler(client, message: Message):
+async def batch_cmd(client, message: Message):
+    user_id = message.from_user.id
+
+    # Ask for first link
+    await message.reply("📌 Please send the first message link (e.g., https://t.me/channel_username/123):")
+
+    # Wait for user's reply (1st link)
     try:
-        # Step 1: Ask for first link
-        msg1 = await message.reply("📌 Please send the first message link (e.g., https://t.me/channel_username/123):")
-        first = await client.listen(message.chat.id, timeout=60)
-
-        if not first.text or "https://t.me/" not in first.text:
-            return await message.reply("❌ Invalid first link.")
-
-        # Step 2: Ask for last link
-        msg2 = await message.reply("📌 Now send the last message link (e.g., https://t.me/channel_username/125):")
-        last = await client.listen(message.chat.id, timeout=60)
-
-        if not last.text or "https://t.me/" not in last.text:
-            return await message.reply("❌ Invalid last link.")
-
-        # Step 3: Extract message IDs
-        try:
-            start_msg_id = int(first.text.strip().split("/")[-1])
-            end_msg_id = int(last.text.strip().split("/")[-1])
-        except Exception:
-            return await message.reply("❌ Failed to extract message IDs. Please make sure the links are correct.")
-
-        if end_msg_id < start_msg_id:
-            return await message.reply("❌ End message ID cannot be smaller than start message ID.")
-
-        # Step 4: Save to MongoDB
-        batch_id = f"batch_{uuid.uuid4().hex[:8]}"
-        batch_col.insert_one({
-            "batch_id": batch_id,
-            "start_msg_id": start_msg_id,
-            "end_msg_id": end_msg_id,
-        })
-
-        await message.reply(
-            f"✅ Batch saved!\n\nHere is your batch link:\n\n`/start {batch_id}`"
-        )
-
+        first_msg = await client.listen(user_id, timeout=60)
     except asyncio.TimeoutError:
-        await message.reply("⏰ Timeout or error occurred. Please try again.")
+        return await message.reply("❌ Timeout occurred. Please try again.")
+
+    # Ask for second link
+    await message.reply("📌 Now send the second message link (e.g., https://t.me/channel_username/130):")
+
+    try:
+        second_msg = await client.listen(user_id, timeout=60)
+    except asyncio.TimeoutError:
+        return await message.reply("❌ Timeout occurred. Please try again.")
+
+    # Extract message IDs
+    def extract_msg_id(link):
+        match = re.search(r'/(\d+)$', link)
+        return int(match.group(1)) if match else None
+
+    start_id = extract_msg_id(first_msg.text)
+    end_id = extract_msg_id(second_msg.text)
+
+    if not start_id or not end_id:
+        return await message.reply("❌ Invalid message link(s). Please try again.")
+
+    if end_id < start_id:
+        return await message.reply("⚠️ End message ID must be greater than start message ID.")
+
+    await message.reply(f"📦 Sending files from ID {start_id} to {end_id}...\nPlease wait...")
+
+    for msg_id in range(start_id, end_id + 1):
+        try:
+            await client.forward_messages(
+                chat_id=user_id,
+                from_chat_id="madara_db_test",  # Replace with your DB_CHANNEL username or ID
+                message_ids=msg_id
+            )
+            await asyncio.sleep(1)
+        except Exception as e:
+            await message.reply(f"⚠️ Failed to send ID {msg_id}: {e}")
+
 
 
 
