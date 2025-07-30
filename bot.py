@@ -61,40 +61,38 @@ async def start_batch_handler(client, message):
     user_id = message.from_user.id
     args = message.text.split(" ", 1)
 
-    if len(args) == 2:
-        arg_value = args[1]
+    if len(args) == 2 and args[1].startswith("batch_"):
+        try:
+            parts = args[1].split("_")
+            chat_id = int(parts[1])
+            first_msg_id = int(parts[2])
+            last_msg_id = int(parts[3])
 
-        # 🗂 Batch link handler
-        if arg_value.startswith("batch_"):
-            try:
-                parts = arg_value.split("_")
-                chat_id = int(parts[1])
-                first_msg_id = int(parts[2])
-                last_msg_id = int(parts[3])
+            files = []
+            for msg_id in range(first_msg_id, last_msg_id + 1):
+                file_data = await files_col.find_one({"_id": f"{chat_id}_{msg_id}"})
+                if file_data:
+                    files.append(file_data)
 
-                files = []
-                for msg_id in range(first_msg_id, last_msg_id + 1):
-                    file_data = await files_col.find_one({"_id": f"{chat_id}_{msg_id}"})
-                    if file_data:
-                        files.append(file_data)
-
-                if not files:
-                    return await message.reply("❌ Invalid or expired batch link.")
-
-                for file in files:
-                    try:
-                        await client.send_cached_media(
-                            chat_id=message.chat.id,
-                            media=file["file_id"],
-                            caption=file.get("caption", "")
-                        )
-                    except Exception as e:
-                        print(f"Failed to send media: {e}")
+            if not files:
+                await message.reply("❌ Invalid or expired batch link.")
                 return
 
-            except Exception as e:
-                print(f"Batch error: {e}")
-                return await message.reply("❌ Something went wrong while processing the batch link.")
+            for file in files:
+                try:
+                    await client.send_cached_media(
+                        chat_id=message.chat.id,
+                        media=file["file_id"],
+                        caption=file.get("caption", "")
+                    )
+                except Exception as e:
+                    print(f"Failed to send media: {e}")
+            return
+
+        except Exception as e:
+            print(f"Batch error: {e}")
+            await message.reply("❌ Something went wrong while processing the batch link.")
+
 
         # 📁 Single file handler
         else:
