@@ -37,7 +37,7 @@ def get_duration_seconds(start, end):
     def to_sec(t): return sum(x * int(t) for x, t in zip([3600, 60, 1], t.split(":")))
     return to_sec(end) - to_sec(start)
 
-@app.on_message(filters.private & filters.command("start"))
+@bot.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     args = message.text.split()
     
