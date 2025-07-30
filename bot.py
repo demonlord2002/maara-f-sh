@@ -14,8 +14,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 # Connect MongoDB
 mongo = pymongo.MongoClient(MONGO_URL)
-batch_col = mongo["madara_bot"]["batch_links"]  # database name: madara_bot, collection: batch_links
-
+batch_col = mongo["madara_bot"]["batch_links"]  #
 
 # Store temporary batch sessions in memory
 batch_sessions = {}
@@ -39,7 +38,6 @@ mongo = AsyncIOMotorClient(MONGO_URL)
 db = mongo["madara_bot"]
 files_col = db["files"]
 users_col = db["users"]
-batch_col = db["batch_links"]
 
 
 app = Client("madara_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
@@ -58,128 +56,24 @@ def get_duration_seconds(start, end):
 @app.on_message(filters.private & filters.command("start"))
 async def start_batch_handler(client, message):
     user_id = message.from_user.id
-    args = message.text.split(" ", 1)
-
-    # If user clicked a batch link
-    if len(args) == 2 and args[1].startswith("batch_"):
-        try:
-            parts = args[1].split("_")
-            chat_id = int(parts[1])
-            first_msg_id = int(parts[2])
-            last_msg_id = int(parts[3])
-
-            files = []
-            for msg_id in range(first_msg_id, last_msg_id + 1):
-                file_data = await files_col.find_one({"_id": f"{chat_id}_{msg_id}"})
-                if file_data:
-                    files.append(file_data)
-
-            if not files:
-                await message.reply("❌ Invalid or expired batch link.")
-                return
-
-            for file in files:
-                try:
-                    await client.send_cached_media(
-                        chat_id=message.chat.id,
-                        media=file["file_id"],
-                        caption=file.get("caption", "")
-                    )
-                except Exception as e:
-                    print(f"Failed to send media: {e}")
-            return
-
-        except Exception as e:
-            print(f"Batch error: {e}")
-            await message.reply("❌ Something went wrong while processing the batch link.")
-            return
-
-    # If user clicked a single file link like /start chatid_msgid
-    elif len(args) == 2 and "_" in args[1]:
-        try:
-            file_id = args[1]
-            data = await files_col.find_one({"_id": file_id})
-
-            if data:
-                await client.copy_message(
-                    chat_id=message.chat.id,
-                    from_chat_id=data["chat_id"],
-                    message_id=data["msg_id"]
-                )
-            else:
-                await message.reply("❌ File not found or expired.")
-        except Exception as e:
-            await message.reply(f"⚠️ Failed to send file: {e}")
-        return
-
-    # Default welcome message
-    await message.reply(
-        "**🩸 Madara Uchiha File Share Bot**\n\n"
-        "Drop your files like a shinobi, share like a legend 💀\n"
-        "Only Uchiha-blessed users can create secret links.\n\n"
-        "📌 Send any file to receive a private sharing link.\n"
-        "🎞 Use `/batch` to create full episode shareable links.\n"
-        "⏳ Use `/status` to check your plan time."
-    )
-
-
-
-
-        
-@app.on_message(filters.private & filters.command("batch"))
-async def batch_cmd(client, message: Message):
-    user_id = message.from_user.id
-    user_steps[user_id] = {"step": 1}
-    await message.reply("📌 Please reply with the **first message link** (e.g., https://t.me/channel/123):")
-
-@app.on_message(filters.private & filters.text)
-async def handle_batch_steps(client, message: Message):
-    user_id = message.from_user.id
-    if user_id not in user_steps:
-        return
-
-    step_data = user_steps[user_id]
-
-    # Step 1: First message link
-    if step_data["step"] == 1:
-        link = message.text.strip()
-        match = re.search(r"https://t.me/([\w_]+)/(\d+)", link)
-        if not match:
-            return await message.reply("❌ Invalid first message link. Try again.")
-
-        step_data["channel"] = match.group(1)
-        step_data["start_id"] = int(match.group(2))
-        step_data["step"] = 2
-        await message.reply("✅ First link saved.\n\n📌 Now send the **last message link**:")
-    
-    # Step 2: Last message link
-    elif step_data["step"] == 2:
-        link = message.text.strip()
-        match = re.search(r"https://t.me/([\w_]+)/(\d+)", link)
-        if not match:
-            return await message.reply("❌ Invalid last message link. Try again.")
-
-        step_data["end_id"] = int(match.group(2))
-        if step_data["end_id"] < step_data["start_id"]:
-            return await message.reply("⚠️ Last message ID must be greater than or equal to the first.")
-
-        # Save batch info to DB
-        batch_id = f"{user_id}_{step_data['start_id']}_{step_data['end_id']}"
-        batch_col.insert_one({
-            "batch_id": batch_id,
-            "user_id": user_id,
-            "db_channel": step_data["channel"],
-            "start_msg_id": step_data["start_id"],
-            "end_msg_id": step_data["end_id"]
-        })
-
-        del user_steps[user_id]  # cleanup
-        share_link = f"https://t.me/{client.me.username}?start=batch_{batch_id}"
-        await message.reply(f"✅ Batch created successfully!\n\n🔗 Share this link:\n`{share_link}`")
-
-
-
-
+@app.on_message(filters.private & filters.command("start"))
+async def start_cmd(client, message: Message):
+    args = message.text.split()
+    if len(args) == 2:
+        file_id = args[1]
+        data = files_col.find_one({"_id": file_id})
+        if data:
+            await client.copy_message(chat_id=message.chat.id, from_chat_id=data["chat_id"], message_id=data["msg_id"])
+        else:
+            await message.reply("❌ File not found or expired.")
+    else:
+        await message.reply(
+            "🩸 Madara Uchiha File Share Bot\n\n"
+            "Drop your files like a shinobi, share like a legend 💀\n"
+            "Only Uchiha-blessed users can create secret links.\n\n"
+            "📌 Send any file to receive a private sharing link.\n"
+            "⏳ Use /status to check your plan time."
+        )
 
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
