@@ -20,7 +20,7 @@ import uuid
 # Store temporary batch sessions in memory
 batch_sessions = {}
 # Setup MongoDB collection for batch
-batch_col = mongo.madara.batch_links
+batch_col = mongo.madara_bot.batch_links
 
 user_steps = {}
 
