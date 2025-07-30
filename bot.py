@@ -11,7 +11,8 @@ from datetime import datetime
 from asyncio import TimeoutError
 from asyncio import get_event_loop, wait_for
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
+from pyrogram.errors import MessageNotModified
+import uuid
 
 
 # Load .env variables
@@ -99,61 +100,47 @@ async def start_cmd(client, message: Message):
 
 
 @app.on_message(filters.private & filters.command("batch"))
-async def batch_cmd(client, message):
-    await message.reply_text(
-        "📌 Please send the **first message link** (e.g., `https://t.me/channel_username/123`):",
-    )
+async def batch_handler(client, message: Message):
     try:
-        first_msg = await client.listen(message.chat.id, timeout=60)
-        if not first_msg.text:
-            return await message.reply("❌ Invalid input. Only links are accepted.")
+        # Step 1: Ask for first link
+        msg1 = await message.reply("📌 Please send the first message link (e.g., https://t.me/channel_username/123):")
+        first = await client.listen(message.chat.id, timeout=60)
 
-        first_link = first_msg.text.strip()
+        if not first.text or "https://t.me/" not in first.text:
+            return await message.reply("❌ Invalid first link.")
 
-        await message.reply_text(
-            "✅ Got it!\nNow send the **last message link** (e.g., `https://t.me/channel_username/132`):"
-        )
+        # Step 2: Ask for last link
+        msg2 = await message.reply("📌 Now send the last message link (e.g., https://t.me/channel_username/125):")
+        last = await client.listen(message.chat.id, timeout=60)
 
-        last_msg = await client.listen(message.chat.id, timeout=60)
-        if not last_msg.text:
-            return await message.reply("❌ Invalid input. Only links are accepted.")
+        if not last.text or "https://t.me/" not in last.text:
+            return await message.reply("❌ Invalid last link.")
 
-        last_link = last_msg.text.strip()
+        # Step 3: Extract message IDs
+        try:
+            start_msg_id = int(first.text.strip().split("/")[-1])
+            end_msg_id = int(last.text.strip().split("/")[-1])
+        except Exception:
+            return await message.reply("❌ Failed to extract message IDs. Please make sure the links are correct.")
 
-        # Extract info from links
-        first = re.findall(r"https://t\.me/(.+)/(\d+)", first_link)
-        last = re.findall(r"https://t\.me/(.+)/(\d+)", last_link)
+        if end_msg_id < start_msg_id:
+            return await message.reply("❌ End message ID cannot be smaller than start message ID.")
 
-        if not first or not last or first[0][0] != last[0][0]:
-            return await message.reply("❌ Invalid links or channel mismatch.")
-
-        channel_username = first[0][0]
-        start_id = int(first[0][1])
-        end_id = int(last[0][1])
-
-        if end_id < start_id:
-            return await message.reply("❌ End ID cannot be less than Start ID.")
-
-        # Store batch in DB
-        batch_id = str(start_id) + "_" + str(end_id) + "_" + channel_username
-        files_col.insert_one({
-            "_id": batch_id,
-            "channel": channel_username,
-            "start_id": start_id,
-            "end_id": end_id,
-            "type": "batch"
+        # Step 4: Save to MongoDB
+        batch_id = f"batch_{uuid.uuid4().hex[:8]}"
+        batch_col.insert_one({
+            "batch_id": batch_id,
+            "start_msg_id": start_msg_id,
+            "end_msg_id": end_msg_id,
         })
 
-        share_link = f"https://t.me/{BOT_USERNAME}?start={batch_id}"
-        await message.reply_text(
-            f"✅ Batch saved!\n\n📎 Your shareable link:\n`{share_link}`",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔥 Open Link", url=share_link)]
-            ])
+        await message.reply(
+            f"✅ Batch saved!\n\nHere is your batch link:\n\n`/start {batch_id}`"
         )
 
-    except Exception as e:
+    except asyncio.TimeoutError:
         await message.reply("⏰ Timeout or error occurred. Please try again.")
+
 
 
 @app.on_message(filters.private & filters.command("status"))
