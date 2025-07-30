@@ -56,56 +56,57 @@ def get_duration_seconds(start, end):
 
 
 @app.on_message(filters.private & filters.command("start"))
-async def start_cmd(client, message: Message):
-    args = message.text.split()
+async def start_batch_handler(client, message):
+    args = message.command
+    if len(args) > 1 and args[1].startswith("batch_"):
+        try:
+            # Example: batch_7590607726_155_162
+            _, chat_id, first_id, last_id = args[1].split("_")
+            chat_id = int(chat_id)
+            first_id = int(first_id)
+            last_id = int(last_id)
 
-    # If a shared link is used (/start <arg>)
-    if len(args) == 2:
-        arg_value = args[1]
+            # Try to find batch in MongoDB
+            query = {"chat_id": chat_id, "first_id": first_id, "last_id": last_id}
+            batch = await batch_col.find_one(query)
 
-        # ✅ Batch File Handling
-        if arg_value.startswith("batch_"):
-            batch_data = batch_col.find_one({"batch_id": arg_value})
-            if not batch_data:
+            if not batch:
                 return await message.reply("❌ Invalid or expired batch link.")
-            
-            start_id = batch_data["start_msg_id"]
-            end_id = batch_data["end_msg_id"]
-            db_channel = batch_data["db_channel"]
 
-            await message.reply(
-                f"📦 Sending your batch files...\nFrom ID `{start_id}` to `{end_id}`"
-            )
-
-            for msg_id in range(start_id, end_id + 1):
-                try:
-                    await client.forward_messages(
-                        chat_id=message.chat.id,
-                        from_chat_id=db_channel,
-                        message_ids=msg_id
-                    )
-                    await asyncio.sleep(0.7)  # throttle for flood control
-                except Exception as e:
-                    await message.reply(f"⚠️ Error sending message ID {msg_id}: {e}")
-                    return
-            return  # End batch handling
-
-        # ✅ Single File Handling
-        else:
-            file_id = arg_value
-            data = files_col.find_one({"_id": file_id})
-            if data:
+            # Send all messages between first_id and last_id
+            for msg_id in range(first_id, last_id + 1):
                 try:
                     await client.copy_message(
                         chat_id=message.chat.id,
-                        from_chat_id=data["chat_id"],
-                        message_id=data["msg_id"]
+                        from_chat_id=chat_id,
+                        message_id=msg_id,
                     )
+                    await asyncio.sleep(0.5)
                 except Exception as e:
-                    await message.reply(f"⚠️ Failed to send file: {e}")
-            else:
-                await message.reply("❌ File not found or expired.")
-            return
+                    print(f"Failed to send {msg_id}: {e}")
+                    continue
+
+        except Exception as e:
+            print(f"Error in /start: {e}")
+            await message.reply("❌ Something went wrong. Invalid format.")
+        return  # End batch handling
+
+    elif len(args) > 1:
+        # ✅ Single File Handling
+        file_id = args[1]
+        data = await files_col.find_one({"_id": file_id})
+        if data:
+            try:
+                await client.copy_message(
+                    chat_id=message.chat.id,
+                    from_chat_id=data["chat_id"],
+                    message_id=data["msg_id"]
+                )
+            except Exception as e:
+                await message.reply(f"⚠️ Failed to send file: {e}")
+        else:
+            await message.reply("❌ File not found or expired.")
+        return
 
     # ✅ Default Welcome Message
     await message.reply(
@@ -116,7 +117,6 @@ async def start_cmd(client, message: Message):
         "🎞 Use `/batch` to create full episode shareable links.\n"
         "⏳ Use `/status` to check your plan time."
     )
-
 
         
 @app.on_message(filters.private & filters.command("batch"))
