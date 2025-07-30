@@ -56,44 +56,41 @@ def get_duration_seconds(start, end):
     return to_sec(end) - to_sec(start)
 
 
-@app.on_message(filters.private & filters.command("start"))
-async def start_batch_handler(client, message):
-    args = message.command
-    if len(args) > 1:
-        arg_value = args[1]
+@Client.on_message(filters.private & filters.command("start"))
+def start_batch_handler(client, message):
+    user_id = message.from_user.id
+    args = message.text.split(" ", 1)
+    if len(args) == 2 and args[1].startswith("batch_"):
+        try:
+            parts = args[1].split("_")
+            chat_id = int(parts[1])
+            first_msg_id = int(parts[2])
+            last_msg_id = int(parts[3])
 
-        if arg_value.startswith("batch_"):
-            try:
-                # Example: batch_7590607726_155_162
-                _, chat_id, first_id, last_id = arg_value.split("_")
-                chat_id = int(chat_id)
-                first_id = int(first_id)
-                last_id = int(last_id)
+            files = []
+            for msg_id in range(first_msg_id, last_msg_id + 1):
+                file_data = files_col.find_one({"_id": f"{chat_id}_{msg_id}"})
+                if file_data:
+                    files.append(file_data)
+            
+            if not files:
+                return message.reply("❌ Invalid or expired batch link.")
 
-                # Use await with Motor
-                query = {"chat_id": chat_id, "first_id": first_id, "last_id": last_id}
-                batch = await batch_col.find_one(query)
+            for file in files:
+                try:
+                    client.send_cached_media(
+                        chat_id=message.chat.id,
+                        media=file["file_id"],
+                        caption=file.get("caption", "")
+                    )
+                except Exception as e:
+                    print(f"Failed to send media: {e}")
+            return
 
-                if not batch:
-                    return await message.reply("❌ Invalid or expired batch link.")
+        except Exception as e:
+            print(f"Batch error: {e}")
+            return message.reply("❌ Something went wrong while processing the batch link.")
 
-                for msg_id in range(first_id, last_id + 1):
-                    try:
-                        await client.copy_message(
-                            chat_id=message.chat.id,
-                            from_chat_id=chat_id,
-                            message_id=msg_id,
-                        )
-                        await asyncio.sleep(0.5)
-                    except Exception as e:
-                        print(f"Failed to send {msg_id}: {e}")
-                        continue
-
-                return  # End after sending batch
-
-            except Exception as e:
-                print(f"Error in /start: {e}")
-                return await message.reply("❌ Something went wrong. Invalid batch format.")
 
         else:
             # ✅ Single File Handling
