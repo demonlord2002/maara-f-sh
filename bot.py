@@ -6,6 +6,7 @@ from pymongo import MongoClient
 import os, time, re, asyncio, subprocess
 import random
 import pymongo
+import asyncio
 from dotenv import load_dotenv
 from pyrogram.errors import MessageNotModified
 from config import DB_CHANNEL, MONGO_URL
@@ -33,10 +34,12 @@ OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
 DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")
 MONGO_URL = os.getenv("MONGO_URL")
 
-mongo = MongoClient(MONGO_URL)
+mongo = MongoClient(os.getenv("MONGO_URL"))
 db = mongo["madara_bot"]
 files_col = db["files"]
 users_col = db["users"]
+batch_col = db["batch_links"]
+
 
 app = Client("madara_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -50,6 +53,7 @@ def is_active(user_id):
 def get_duration_seconds(start, end):
     def to_sec(t): return sum(x * int(t) for x, t in zip([3600, 60, 1], t.split(":")))
     return to_sec(end) - to_sec(start)
+
 
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
@@ -80,11 +84,11 @@ async def start_cmd(client, message: Message):
                         from_chat_id=db_channel,
                         message_ids=msg_id
                     )
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.7)  # throttle for flood control
                 except Exception as e:
                     await message.reply(f"⚠️ Error sending message ID {msg_id}: {e}")
                     return
-            return  # end batch case
+            return  # End batch handling
 
         # ✅ Single File Handling
         else:
@@ -112,6 +116,7 @@ async def start_cmd(client, message: Message):
         "🎞 Use `/batch` to create full episode shareable links.\n"
         "⏳ Use `/status` to check your plan time."
     )
+
 
         
 @app.on_message(filters.private & filters.command("batch"))
