@@ -6,23 +6,8 @@ from pymongo import MongoClient
 import os, time, re, asyncio, subprocess
 import random
 import pymongo
-import asyncio
 from dotenv import load_dotenv
 from pyrogram.errors import MessageNotModified
-from config import DB_CHANNEL, MONGO_URL
-from motor.motor_asyncio import AsyncIOMotorClient
-
-# Connect MongoDB
-mongo = pymongo.MongoClient(MONGO_URL)
-batch_col = mongo["madara_bot"]["batch_links"]  #
-
-# Store temporary batch sessions in memory
-batch_sessions = {}
-
-# Setup MongoDB collection for batch
-batch_col = mongo.madara_bot.batch_links
-
-user_steps = {}
 
 # Load .env variables
 load_dotenv()
@@ -34,7 +19,8 @@ OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
 DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")
 MONGO_URL = os.getenv("MONGO_URL")
 
-mongo = AsyncIOMotorClient(MONGO_URL)
+# Connect MongoDB
+mongo = MongoClient(MONGO_URL)
 db = mongo["madara_bot"]
 files_col = db["files"]
 users_col = db["users"]
@@ -54,16 +40,20 @@ def get_duration_seconds(start, end):
     return to_sec(end) - to_sec(start)
 
 @app.on_message(filters.private & filters.command("start"))
-async def start_batch_handler(client, message):
-    user_id = message.from_user.id
-@app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     args = message.text.split()
+    user_id = message.from_user.id
+
+    # If file_id is provided
     if len(args) == 2:
         file_id = args[1]
         data = files_col.find_one({"_id": file_id})
         if data:
-            await client.copy_message(chat_id=message.chat.id, from_chat_id=data["chat_id"], message_id=data["msg_id"])
+            await client.copy_message(
+                chat_id=message.chat.id,
+                from_chat_id=data["chat_id"],
+                message_id=data["msg_id"]
+            )
         else:
             await message.reply("❌ File not found or expired.")
     else:
