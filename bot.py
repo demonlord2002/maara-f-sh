@@ -55,56 +55,64 @@ def get_duration_seconds(start, end):
 async def start_cmd(client, message: Message):
     args = message.text.split()
 
+    # If a shared link is used (/start <arg>)
     if len(args) == 2:
         arg_value = args[1]
 
-        # ✅ Batch Handling
+        # ✅ Batch File Handling
         if arg_value.startswith("batch_"):
-    batch_data = batch_col.find_one({"batch_id": arg_value})
-    if not batch_data:
-        return await message.reply("❌ Invalid or expired batch link.")
-    
-    start_id = batch_data["start_msg_id"]
-    end_id = batch_data["end_msg_id"]
-    db_channel = batch_data["db_channel"]
+            batch_data = batch_col.find_one({"batch_id": arg_value})
+            if not batch_data:
+                return await message.reply("❌ Invalid or expired batch link.")
+            
+            start_id = batch_data["start_msg_id"]
+            end_id = batch_data["end_msg_id"]
+            db_channel = batch_data["db_channel"]
 
-    await message.reply(
-        f"📦 Sending your batch files...\nFrom ID `{start_id}` to `{end_id}`"
-    )
-
-    for msg_id in range(start_id, end_id + 1):
-        try:
-            await client.forward_messages(
-                chat_id=message.chat.id,
-                from_chat_id=db_channel,
-                message_ids=msg_id
+            await message.reply(
+                f"📦 Sending your batch files...\nFrom ID `{start_id}` to `{end_id}`"
             )
-            await asyncio.sleep(1)
-        except Exception as e:
-            await message.reply(f"⚠️ Error sending message ID {msg_id}: {e}")
-            return
+
+            for msg_id in range(start_id, end_id + 1):
+                try:
+                    await client.forward_messages(
+                        chat_id=message.chat.id,
+                        from_chat_id=db_channel,
+                        message_ids=msg_id
+                    )
+                    await asyncio.sleep(1)
+                except Exception as e:
+                    await message.reply(f"⚠️ Error sending message ID {msg_id}: {e}")
+                    return
+            return  # end batch case
 
         # ✅ Single File Handling
-        file_id = arg_value
-        data = files_col.find_one({"_id": file_id})
-        if data:
-            await client.copy_message(
-                chat_id=message.chat.id,
-                from_chat_id=data["chat_id"],
-                message_id=data["msg_id"]
-            )
         else:
-            await message.reply("❌ File not found or expired.")
+            file_id = arg_value
+            data = files_col.find_one({"_id": file_id})
+            if data:
+                try:
+                    await client.copy_message(
+                        chat_id=message.chat.id,
+                        from_chat_id=data["chat_id"],
+                        message_id=data["msg_id"]
+                    )
+                except Exception as e:
+                    await message.reply(f"⚠️ Failed to send file: {e}")
+            else:
+                await message.reply("❌ File not found or expired.")
+            return
 
-    else:
-        await message.reply(
-            "**🩸 Madara Uchiha File Share Bot**\n\n"
-            "Drop your files like a shinobi, share like a legend 💀\n"
-            "Only Uchiha-blessed users can create secret links.\n\n"
-            "📌 Send any file to receive a private sharing link.\n"
-            "🎞 Use `/batch` to create full episode shareable links.\n"
-            "⏳ Use `/status` to check your plan time."
-        )
+    # ✅ Default Welcome Message
+    await message.reply(
+        "**🩸 Madara Uchiha File Share Bot**\n\n"
+        "Drop your files like a shinobi, share like a legend 💀\n"
+        "Only Uchiha-blessed users can create secret links.\n\n"
+        "📌 Send any file to receive a private sharing link.\n"
+        "🎞 Use `/batch` to create full episode shareable links.\n"
+        "⏳ Use `/status` to check your plan time."
+    )
+
         
 @app.on_message(filters.private & filters.command("batch"))
 async def batch_cmd(client, message: Message):
