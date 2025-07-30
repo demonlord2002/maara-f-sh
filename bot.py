@@ -156,11 +156,6 @@ async def batch_cmd(client, message):
         await message.reply("⏰ Timeout or error occurred. Please try again.")
 
 
-# Patch into your Pyrogram client
-Client.listen_for_reply = listen_for_reply_once
-Client.listen_once = listen_once_patch
-
-
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
     user_id = message.from_user.id
