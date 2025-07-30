@@ -4,7 +4,10 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from pymongo import MongoClient
 import os, time, re, asyncio, subprocess
+import string
+import random
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load .env variables
 load_dotenv()
@@ -37,13 +40,47 @@ def get_duration_seconds(start, end):
 @app.on_message(filters.private & filters.command("start"))
 async def start_cmd(client, message: Message):
     args = message.text.split()
+    
     if len(args) == 2:
-        file_id = args[1]
+        arg_value = args[1]
+
+        # ✅ Batch Handling
+        if arg_value.startswith("batch_"):
+            batch_data = batch_col.find_one({"batch_id": arg_value})
+            if not batch_data:
+                return await message.reply("❌ Invalid or expired batch link.")
+            
+            start_id = batch_data["start_msg_id"]
+            end_id = batch_data["end_msg_id"]
+            
+            await message.reply(
+                f"📦 Sending your batch files (ID {start_id} to {end_id})...\nPlease wait..."
+            )
+
+            for msg_id in range(start_id, end_id + 1):
+                try:
+                    await client.forward_messages(
+                        chat_id=message.chat.id,
+                        from_chat_id="madara_db_test",  # Replace this with your real DB_CHANNEL ID
+                        message_ids=msg_id
+                    )
+                    await asyncio.sleep(1)
+                except Exception as e:
+                    await message.reply(f"⚠️ Error sending file ID {msg_id}: {e}")
+            return
+
+        # ✅ Single File Link Handling (Your Original Code)
+        file_id = arg_value
         data = files_col.find_one({"_id": file_id})
         if data:
-            await client.copy_message(chat_id=message.chat.id, from_chat_id=data["chat_id"], message_id=data["msg_id"])
+            await client.copy_message(
+                chat_id=message.chat.id,
+                from_chat_id=data["chat_id"],
+                message_id=data["msg_id"]
+            )
         else:
             await message.reply("❌ File not found or expired.")
+
     else:
         await message.reply(
             "**🩸 Madara Uchiha File Share Bot**\n\n"
@@ -52,6 +89,38 @@ async def start_cmd(client, message: Message):
             "📌 Send any file to receive a private sharing link.\n"
             "⏳ Use /status to check your plan time."
         )
+
+
+@bot.on_message(filters.command("batch") & filters.private)
+async def batch_handler(client, message: Message):
+    user_id = message.from_user.id
+
+    await message.reply("📥 Please send the **first message link** from your file channel.")
+    first = await client.listen(message.chat.id, timeout=60)
+    first_link = first.text.strip()
+    start_msg_id = extract_msg_id(first_link)
+    if not start_msg_id:
+        return await message.reply("❌ Invalid first message link.")
+
+    await message.reply("📤 Now send the **last message link** from your file channel.")
+    last = await client.listen(message.chat.id, timeout=60)
+    last_link = last.text.strip()
+    end_msg_id = extract_msg_id(last_link)
+    if not end_msg_id or end_msg_id < start_msg_id:
+        return await message.reply("❌ Invalid last message link.")
+
+    batch_id = "batch_" + random_batch_id()
+    BATCH_DB.insert_one({
+        "batch_id": batch_id,
+        "start_msg_id": start_msg_id,
+        "end_msg_id": end_msg_id,
+        "created_by": user_id,
+        "created_at": datetime.utcnow()
+    })
+
+    batch_link = f"https://t.me/{client.me.username}?start={batch_id}"
+    await message.reply(f"✅ **Batch Link Created!**\n\n🔗 {batch_link}")
+    
 
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
