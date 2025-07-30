@@ -8,6 +8,8 @@ import string
 import random
 from dotenv import load_dotenv
 from datetime import datetime
+from asyncio import TimeoutError
+from asyncio import get_event_loop, wait_for
 
 # Load .env variables
 load_dotenv()
@@ -90,37 +92,60 @@ async def start_cmd(client, message: Message):
             "⏳ Use /status to check your plan time."
         )
 
-
-@app.on_message(filters.command("batch") & filters.private)
+@app.on_message(filters.private & filters.command("batch"))
 async def batch_handler(client, message: Message):
     user_id = message.from_user.id
+    await message.reply_text("📌 Please reply to the message you want to batch-share.\nSend `cancel` to stop.", quote=True)
 
-    await message.reply("📥 Please send the **first message link** from your file channel.")
-    first = await client.listen(message.chat.id, timeout=60)
-    first_link = first.text.strip()
-    start_msg_id = extract_msg_id(first_link)
-    if not start_msg_id:
-        return await message.reply("❌ Invalid first message link.")
+    try:
+        reply_msg = await client.listen_for_reply(chat_id=message.chat.id, timeout=60)
+    except TimeoutError:
+        await message.reply("⏰ Timeout! You didn’t reply within 60 seconds.")
+        return
 
-    await message.reply("📤 Now send the **last message link** from your file channel.")
-    last = await client.listen(message.chat.id, timeout=60)
-    last_link = last.text.strip()
-    end_msg_id = extract_msg_id(last_link)
-    if not end_msg_id or end_msg_id < start_msg_id:
-        return await message.reply("❌ Invalid last message link.")
+    if not reply_msg.reply_to_message:
+        await message.reply("❌ You must reply to a message to batch-share it.")
+        return
 
-    batch_id = "batch_" + random_batch_id()
-    BATCH_DB.insert_one({
-        "batch_id": batch_id,
-        "start_msg_id": start_msg_id,
-        "end_msg_id": end_msg_id,
-        "created_by": user_id,
-        "created_at": datetime.utcnow()
+    replied = reply_msg.reply_to_message
+
+    if not replied.media:
+        await message.reply("❌ That’s not a file message.")
+        return
+
+    # Save to MongoDB (assuming 'files_col' is your MongoDB collection)
+    file_id = str(replied.id)
+    files_col.insert_one({
+        "_id": file_id,
+        "chat_id": replied.chat.id,
+        "msg_id": replied.id,
+        "user_id": user_id
     })
 
-    batch_link = f"https://t.me/{client.me.username}?start={batch_id}"
-    await message.reply(f"✅ **Batch Link Created!**\n\n🔗 {batch_link}")
-    
+    share_link = f"https://t.me/{BOT_USERNAME}?start={file_id}"
+    await message.reply_text(f"✅ Batch file saved!\n\n🔗 Your shareable link:\n{share_link}")
+
+def listen_for_reply_once(client, chat_id, timeout=60):
+    loop = get_event_loop()
+    return wait_for(client.listen_once(chat_id), timeout=timeout)
+
+def listen_once_patch(self, chat_id):
+    from pyrogram import filters
+
+    future = get_event_loop().create_future()
+
+    @self.on_message(filters.chat(chat_id) & filters.reply)
+    async def _listener(_, msg: Message):
+        if not future.done():
+            future.set_result(msg)
+            await _listener.stop()  # stop listening after one message
+
+    return future
+
+# Patch into your Pyrogram client
+Client.listen_for_reply = listen_for_reply_once
+Client.listen_once = listen_once_patch
+
 
 @app.on_message(filters.private & filters.command("status"))
 async def status_cmd(client, message: Message):
