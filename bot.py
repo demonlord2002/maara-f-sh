@@ -13,10 +13,15 @@ from asyncio import get_event_loop, wait_for
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import MessageNotModified
 import uuid
+from config import DB_CHANNEL, MONGO_URL
 
 
 # Store temporary batch sessions in memory
 batch_sessions = {}
+# Setup MongoDB collection for batch
+batch_col = mongo.madara.batch_links
+
+user_steps = {}
 
 # Load .env variables
 load_dotenv()
@@ -55,28 +60,28 @@ async def start_cmd(client, message: Message):
 
         # ✅ Batch Handling
         if arg_value.startswith("batch_"):
-            batch_data = batch_col.find_one({"batch_id": arg_value})
-            if not batch_data:
-                return await message.reply("❌ Invalid or expired batch link.")
-            
-            start_id = batch_data["start_msg_id"]
-            end_id = batch_data["end_msg_id"]
-            db_channel = batch_data["db_channel"]  # Make sure to save this during /batch creation
+    batch_data = batch_col.find_one({"batch_id": arg_value})
+    if not batch_data:
+        return await message.reply("❌ Invalid or expired batch link.")
+    
+    start_id = batch_data["start_msg_id"]
+    end_id = batch_data["end_msg_id"]
+    db_channel = batch_data["db_channel"]
 
-            await message.reply(
-                f"📦 Sending your batch files...\n🆔 From Message ID `{start_id}` to `{end_id}`\n⏳ Please wait..."
+    await message.reply(
+        f"📦 Sending your batch files...\nFrom ID `{start_id}` to `{end_id}`"
+    )
+
+    for msg_id in range(start_id, end_id + 1):
+        try:
+            await client.forward_messages(
+                chat_id=message.chat.id,
+                from_chat_id=db_channel,
+                message_ids=msg_id
             )
-
-            for msg_id in range(start_id, end_id + 1):
-                try:
-                    await client.forward_messages(
-                        chat_id=message.chat.id,
-                        from_chat_id="madara_db_test",  # Works with username like "madara_db_test"
-                        message_ids=msg_id
-                    )
-                    await asyncio.sleep(1)
-                except Exception as e:
-                    await message.reply(f"⚠️ Error sending file ID {msg_id}: {e}")
+            await asyncio.sleep(1)
+        except Exception as e:
+            await message.reply(f"⚠️ Error sending message ID {msg_id}: {e}")
             return
 
         # ✅ Single File Handling
@@ -100,55 +105,58 @@ async def start_cmd(client, message: Message):
             "🎞 Use `/batch` to create full episode shareable links.\n"
             "⏳ Use `/status` to check your plan time."
         )
-
-
+        
 @app.on_message(filters.private & filters.command("batch"))
 async def batch_cmd(client, message: Message):
     user_id = message.from_user.id
+    user_steps[user_id] = {"step": 1}
+    await message.reply("📌 Please reply with the **first message link** (e.g., https://t.me/channel/123):")
 
-    # Ask for first link
-    await message.reply("📌 Please send the first message link (e.g., https://t.me/channel_username/123):")
+@app.on_message(filters.private & filters.text)
+async def handle_batch_steps(client, message: Message):
+    user_id = message.from_user.id
+    if user_id not in user_steps:
+        return
 
-    # Wait for user's reply (1st link)
-    try:
-        first_msg = await client.listen(user_id, timeout=60)
-    except asyncio.TimeoutError:
-        return await message.reply("❌ Timeout occurred. Please try again.")
+    step_data = user_steps[user_id]
 
-    # Ask for second link
-    await message.reply("📌 Now send the second message link (e.g., https://t.me/channel_username/130):")
+    # Step 1: First message link
+    if step_data["step"] == 1:
+        link = message.text.strip()
+        match = re.search(r"https://t.me/([\w_]+)/(\d+)", link)
+        if not match:
+            return await message.reply("❌ Invalid first message link. Try again.")
 
-    try:
-        second_msg = await client.listen(user_id, timeout=60)
-    except asyncio.TimeoutError:
-        return await message.reply("❌ Timeout occurred. Please try again.")
+        step_data["channel"] = match.group(1)
+        step_data["start_id"] = int(match.group(2))
+        step_data["step"] = 2
+        await message.reply("✅ First link saved.\n\n📌 Now send the **last message link**:")
+    
+    # Step 2: Last message link
+    elif step_data["step"] == 2:
+        link = message.text.strip()
+        match = re.search(r"https://t.me/([\w_]+)/(\d+)", link)
+        if not match:
+            return await message.reply("❌ Invalid last message link. Try again.")
 
-    # Extract message IDs
-    def extract_msg_id(link):
-        match = re.search(r'/(\d+)$', link)
-        return int(match.group(1)) if match else None
+        step_data["end_id"] = int(match.group(2))
+        if step_data["end_id"] < step_data["start_id"]:
+            return await message.reply("⚠️ Last message ID must be greater than or equal to the first.")
 
-    start_id = extract_msg_id(first_msg.text)
-    end_id = extract_msg_id(second_msg.text)
+        # Save batch info to DB
+        batch_id = f"{user_id}_{step_data['start_id']}_{step_data['end_id']}"
+        batch_col.insert_one({
+            "batch_id": batch_id,
+            "user_id": user_id,
+            "db_channel": step_data["channel"],
+            "start_msg_id": step_data["start_id"],
+            "end_msg_id": step_data["end_id"]
+        })
 
-    if not start_id or not end_id:
-        return await message.reply("❌ Invalid message link(s). Please try again.")
+        del user_steps[user_id]  # cleanup
+        share_link = f"https://t.me/{client.me.username}?start=batch_{batch_id}"
+        await message.reply(f"✅ Batch created successfully!\n\n🔗 Share this link:\n`{share_link}`")
 
-    if end_id < start_id:
-        return await message.reply("⚠️ End message ID must be greater than start message ID.")
-
-    await message.reply(f"📦 Sending files from ID {start_id} to {end_id}...\nPlease wait...")
-
-    for msg_id in range(start_id, end_id + 1):
-        try:
-            await client.forward_messages(
-                chat_id=user_id,
-                from_chat_id="madara_db_test",  # Replace with your DB_CHANNEL username or ID
-                message_ids=msg_id
-            )
-            await asyncio.sleep(1)
-        except Exception as e:
-            await message.reply(f"⚠️ Failed to send ID {msg_id}: {e}")
 
 
 
