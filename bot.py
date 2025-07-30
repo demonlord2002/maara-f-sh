@@ -4,21 +4,20 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from pymongo import MongoClient
 import os, time, re, asyncio, subprocess
-import string
 import random
+import pymongo
 from dotenv import load_dotenv
-from datetime import datetime
-from asyncio import TimeoutError
-from asyncio import get_event_loop, wait_for
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import MessageNotModified
 from config import DB_CHANNEL, MONGO_URL
-import uuid
 
+# Connect MongoDB
+mongo = pymongo.MongoClient(MONGO_URL)
+batch_col = mongo["madara_bot"]["batch_links"]  # database name: madara_bot, collection: batch_links
 
 
 # Store temporary batch sessions in memory
 batch_sessions = {}
+
 # Setup MongoDB collection for batch
 batch_col = mongo.madara_bot.batch_links
 
