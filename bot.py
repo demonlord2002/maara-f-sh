@@ -55,12 +55,12 @@ def get_duration_seconds(start, end):
     def to_sec(t): return sum(x * int(t) for x, t in zip([3600, 60, 1], t.split(":")))
     return to_sec(end) - to_sec(start)
 
-
 @app.on_message(filters.private & filters.command("start"))
 async def start_batch_handler(client, message):
     user_id = message.from_user.id
     args = message.text.split(" ", 1)
 
+    # If user clicked a batch link
     if len(args) == 2 and args[1].startswith("batch_"):
         try:
             parts = args[1].split("_")
@@ -92,27 +92,27 @@ async def start_batch_handler(client, message):
         except Exception as e:
             print(f"Batch error: {e}")
             await message.reply("❌ Something went wrong while processing the batch link.")
-
-
-        # 📁 Single file handler
-        else:
-            try:
-                file_id = arg_value
-                data = await files_col.find_one({"_id": file_id})
-
-                if data:
-                    await client.copy_message(
-                        chat_id=message.chat.id,
-                        from_chat_id=data["chat_id"],
-                        message_id=data["msg_id"]
-                    )
-                else:
-                    await message.reply("❌ File not found or expired.")
-            except Exception as e:
-                await message.reply(f"⚠️ Failed to send file: {e}")
             return
 
-    # 👋 Default Welcome Message
+    # If user clicked a single file link like /start chatid_msgid
+    elif len(args) == 2 and "_" in args[1]:
+        try:
+            file_id = args[1]
+            data = await files_col.find_one({"_id": file_id})
+
+            if data:
+                await client.copy_message(
+                    chat_id=message.chat.id,
+                    from_chat_id=data["chat_id"],
+                    message_id=data["msg_id"]
+                )
+            else:
+                await message.reply("❌ File not found or expired.")
+        except Exception as e:
+            await message.reply(f"⚠️ Failed to send file: {e}")
+        return
+
+    # Default welcome message
     await message.reply(
         "**🩸 Madara Uchiha File Share Bot**\n\n"
         "Drop your files like a shinobi, share like a legend 💀\n"
@@ -121,6 +121,7 @@ async def start_batch_handler(client, message):
         "🎞 Use `/batch` to create full episode shareable links.\n"
         "⏳ Use `/status` to check your plan time."
     )
+
 
 
 
