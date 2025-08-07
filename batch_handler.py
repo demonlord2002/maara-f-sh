@@ -8,7 +8,7 @@ from pyrogram import filters
 from pyrogram.types import Message
 
 from database import save_batch, get_batch
-from config import OWNER_ID
+from config import Config  ✅
 from bot import bot  # or from your main bot instance
 
 # Temporary file cache per uploader
@@ -35,7 +35,7 @@ async def save_batch_cmd(client, message: Message):
 @bot.on_message(filters.private & filters.document)
 async def handle_batch_files(client, message: Message):
     user_id = message.from_user.id
-    if user_id != OWNER_ID:
+    if user_id != Config.OWNER_ID:
         return
     if user_id not in temp_batches:
         temp_batches[user_id] = []
