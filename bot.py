@@ -1,5 +1,7 @@
 # ✅ Madara Uchiha File Share Bot with MongoDB
 
+# In your bot.py or main entry file
+from batch_handler import *  # Load batch handling logic
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pymongo import MongoClient
