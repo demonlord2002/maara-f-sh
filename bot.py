@@ -6,7 +6,6 @@ from pymongo import MongoClient
 import os, time, re, asyncio, subprocess
 import random
 import pymongo
-from batch_handler import *  
 from dotenv import load_dotenv
 from pyrogram.errors import MessageNotModified
 
