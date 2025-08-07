@@ -14,7 +14,7 @@ class Config:
     OWNER_IDS = list(map(int, os.getenv("OWNER_IDS", "").split(",")))
 
     # File storage channel ID (must be -100xxxxxxxxxxxx)
-    DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))
+    DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")  # keep it as str
 
     # MongoDB connection string
     MONGO_URL = os.getenv("MONGO_URL")
