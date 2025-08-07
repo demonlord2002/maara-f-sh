@@ -8,7 +8,7 @@ from pyrogram import filters
 from pyrogram.types import Message
 
 from database import save_batch, get_batch
-from config import Config  ✅
+from config import Config  
 from bot import bot  # or from your main bot instance
 
 # Temporary file cache per uploader
