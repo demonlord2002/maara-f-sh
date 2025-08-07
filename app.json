@@ -21,7 +21,7 @@
     },
     "BOT_TOKEN": {
       "description": "Telegram Bot Token from @BotFather",
-      "value": "7535712545:AAGp88aIaeMEKNaqX1WGtby0mab-7GcoAKQ",
+      "value": "7535712545:AAHFTW9Adh530PCqTXbqzsgWiQpL7ZUTrWM",
       "required": true
     },
     "OWNER_IDS": {
