@@ -1,6 +1,6 @@
 
 
-<p align="center"><a href="https://dashboard.heroku.com/new?template=https://github.com/cookies2002/file_share_bot"> <img src="https://www.herokucdn.com/deploy/button.svg"></a></p>
+<p align="center"><a href="https://dashboard.heroku.com/new?template=https://github.com/demonlord2002/madara-file-sh"> <img src="https://www.herokucdn.com/deploy/button.svg"></a></p>
 
 
 # ⚡ Madara Uchiha - File Share Bot
