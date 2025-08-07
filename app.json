@@ -1,23 +1,32 @@
 {
-  "name": "Telegram File Share Bot",
-  "description": "A simple Telegram bot to generate shareable file links",
-  "repository": "https://github.com/cookies2002/file_share_bot",
-  "keywords": ["telegram", "file", "share", "bot"],
+  "name": "Madara File Sharing Bot",
+  "description": "A Telegram bot for sharing and storing files, built with Pyrogram and MongoDB.",
+  "repository": "https://github.com/yourusername/madara-file-share-bot",
+  "keywords": ["telegram", "file-bot", "pyrogram", "mongodb", "madara"],
   "env": {
-    "BOT_TOKEN": {
-      "description": "Telegram bot token from @BotFather"
-    },
     "API_ID": {
-      "description": "Get this from https://my.telegram.org"
+      "description": "Your Telegram API ID (from https://my.telegram.org)",
+      "required": true
     },
     "API_HASH": {
-      "description": "Get this from https://my.telegram.org"
+      "description": "Your Telegram API Hash (from https://my.telegram.org)",
+      "required": true
     },
-    "OWNER_ID": {
-      "description": "Your Telegram user ID"
+    "BOT_TOKEN": {
+      "description": "Bot token from @BotFather",
+      "required": true
     },
-    "CHANNEL_ID": {
-      "description": "Your private channel ID where files will be stored"
+    "OWNER_IDS": {
+      "description": "Comma-separated Telegram user IDs of bot owners (e.g., 123456789,987654321)",
+      "required": true
+    },
+    "DB_CHANNEL_ID": {
+      "description": "Telegram channel ID for storing files (e.g., -1001234567890)",
+      "required": true
+    },
+    "MONGO_URL": {
+      "description": "Your MongoDB connection URI",
+      "required": true
     }
   },
   "buildpacks": [
@@ -30,5 +39,9 @@
       "quantity": 1,
       "size": "free"
     }
+  },
+  "addons": [],
+  "scripts": {
+    "postdeploy": "echo '✅ Madara File Sharing Bot deployed successfully!'"
   }
 }
