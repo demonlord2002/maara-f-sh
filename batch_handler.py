@@ -18,7 +18,7 @@ temp_batches = {}
 @bot.on_message(filters.private & filters.command("save"))
 async def save_batch_cmd(client, message: Message):
     user_id = message.from_user.id
-    if user_id != OWNER_ID:
+     if user_id != Config.OWNER_ID:
         return await message.reply("❌ Only the owner can save batches.")
     if user_id not in temp_batches or not temp_batches[user_id]:
         return await message.reply("⚠️ No files to save. Send files first.")
