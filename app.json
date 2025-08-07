@@ -4,9 +4,8 @@
   "repository": "https://github.com/yourusername/madara-file-share-bot",
   "keywords": ["telegram", "file-bot", "pyrogram", "mongodb", "madara"],
   "buildpacks": [
-    {
-      "url": "heroku/python"
-    }
+    { "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git" },
+    { "url": "heroku/python" }
   ],
   "env": {
     "API_ID": {
