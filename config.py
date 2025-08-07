@@ -13,7 +13,7 @@ class Config:
     # Owner user IDs (comma-separated in .env)
     OWNER_IDS = list(map(int, os.getenv("OWNER_IDS", "").split(",")))
 
-    # File storage channel ID (must be -100xxxxxxxxxxxx)
+    # File storage channel ID (must be madara_db_test)
     DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID")  # keep it as str
 
     # MongoDB connection string
