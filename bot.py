@@ -1,5 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
+from pyrogram.enums import ParseMode
 from pymongo import MongoClient
 from config import *
 import datetime
@@ -79,7 +80,8 @@ async def start(client, message):
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)],
                 [InlineKeyboardButton("✅ Verify Joined", callback_data="verify_sub")]
-            ])
+            ]),
+            parse_mode=ParseMode.MARKDOWN
         )
         return
 
@@ -91,7 +93,7 @@ async def start(client, message):
             [InlineKeyboardButton("Owner", url=f"https://t.me/{OWNER_USERNAME}"),
              InlineKeyboardButton("Support Channel", url=SUPPORT_LINK)]
         ]),
-        parse_mode="markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
 # ---------------- VERIFY SUB BUTTON ----------------
@@ -143,7 +145,7 @@ async def handle_file(client, message):
             [InlineKeyboardButton("Yes, rename ✏️", callback_data=f"rename_{fwd_msg.id}")],
             [InlineKeyboardButton("No, give link 🔗", callback_data=f"link_{fwd_msg.id}")]
         ]),
-        parse_mode="markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
 # ---------------- RENAME CALLBACK ----------------
