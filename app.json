@@ -20,7 +20,7 @@
     },
     "BOT_TOKEN": {
       "description": "Telegram Bot Token from @BotFather",
-      "value": "7535712545:AAHFTW9Adh530PCqTXbqzsgWiQpL7ZUTrWM",
+      "value": "7535712545:AAHFTW9Adh530PCqTXbqsgWiQpL7ZUTrWM",
       "required": true
     },
     "OWNER_IDS": {
@@ -28,26 +28,41 @@
       "value": "7813285237",
       "required": true
     },
-    "DB_CHANNEL_ID": {
-      "description": "Telegram Channel ID for storing files (must be numeric, e.g., -1001234567890)",
-      "value": "madara_db_test",
+    "DATABASE_CHANNEL": {
+      "description": "Telegram Channel ID or username for storing files (e.g., -1001234567890 or @channelusername)",
+      "value": "@madara_db_test",
       "required": true
     },
-    "MONGO_URL": {
+    "MONGO_URI": {
       "description": "MongoDB URI for storing permanent file records",
       "value": "mongodb+srv://xarwin2:xarwin2002@cluster0.qmetx2m.mongodb.net/?retryWrites=true&w=majority",
       "required": true
     },
-    "FORCE_CHANNEL": {
+    "FORCE_SUBSCRIBE_CHANNEL": {
       "description": "Telegram channel username for force subscribe",
-      "value": "Fallen_Angels_Team",
+      "value": "@Fallen_Angels_Team",
       "required": true
+    },
+    "SUPPORT_LINK": {
+      "description": "Telegram support channel link",
+      "value": "https://t.me/Fallen_Angels_Team",
+      "required": true
+    },
+    "OWNER_USERNAME": {
+      "description": "Telegram username of bot owner",
+      "value": "SunsetOfMe",
+      "required": true
+    },
+    "WEB_URL": {
+      "description": "Your public website URL for permanent links (optional)",
+      "value": "https://example.com",
+      "required": false
     }
   },
   "formation": {
     "worker": {
       "quantity": 1,
-      "size": "Basic"
+      "size": "free"
     }
   },
   "addons": [],
