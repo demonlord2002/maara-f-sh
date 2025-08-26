@@ -27,15 +27,27 @@ async def is_subscribed(user_id: int) -> bool:
     except:
         return False
 
-# ---------------- CONTENT RESTRICT CHECK ----------------
-def is_restricted(file_name: str) -> bool:
-    restricted_keywords = ["porn", "xxx", "adult", "18+"]  # extendable
-    return any(word in file_name.lower() for word in restricted_keywords)
-
 # ---------------- START COMMAND ----------------
 @app.on_message(filters.command("start"))
 async def start(client, message):
-    # store user info for broadcasts
+    # Check if it's a file start link
+    args = message.text.split(maxsplit=1)
+    if len(args) > 1 and args[1].startswith("file_"):
+        file_id = int(args[1].replace("file_", ""))
+        file_doc = files_col.find_one({"file_id": file_id, "status": "active"})
+        if file_doc:
+            # Send the stored file
+            await client.forward_messages(
+                message.chat.id,
+                chat_id=file_doc["chat_id"],
+                message_ids=file_doc["file_id"]
+            )
+            return
+        else:
+            await message.reply_text("❌ This file is not available anymore.")
+            return
+
+    # Otherwise normal start
     users_col.update_one(
         {"user_id": message.from_user.id},
         {"$set": {
@@ -46,7 +58,6 @@ async def start(client, message):
         upsert=True
     )
 
-    # Force subscribe check
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
             f"🚨 Access Restricted!\n\nTo use this bot, you must join our official channel first.\n"
@@ -58,16 +69,13 @@ async def start(client, message):
         )
         return
 
-    # Normal start message
     await message.reply_text(
         f"👋 Hello {message.from_user.first_name}!\n\n"
-        "Forward any file to me and I will instantly generate a **permanent Telegram shareable link**!\n\n"
-        "⚡ Premium: links never expire.\n"
-        "📌 Stay subscribed to our channel for updates and uninterrupted service.",
+        "Send me any file and I will give you a **shareable link**.\n\n"
+        "When your friends click that link, the bot will deliver the file to them instantly 🚀",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Owner", url=f"https://t.me/{OWNER_USERNAME}"),
-             InlineKeyboardButton("Support Channel", url=SUPPORT_LINK)],
-            [InlineKeyboardButton("Premium Access 💎", url=SUPPORT_LINK)]
+             InlineKeyboardButton("Support Channel", url=SUPPORT_LINK)]
         ])
     )
 
@@ -78,7 +86,7 @@ async def verify_subscription(client, callback_query):
     if await is_subscribed(user_id):
         await callback_query.message.edit_text(
             f"✅ Verification successful!\n\n"
-            "You can now forward any file to receive a permanent shareable Telegram link."
+            "Now send me a file to get a permanent shareable link."
         )
     else:
         await callback_query.answer(
@@ -96,7 +104,7 @@ async def handle_file(client, message):
         )
         return
 
-    # Determine file name
+    # Get file info
     file_name = None
     if message.document:
         file_name = message.document.file_name
@@ -105,21 +113,12 @@ async def handle_file(client, message):
     elif message.audio:
         file_name = message.audio.file_name
 
-    # Polite adult content restriction
-    if file_name and is_restricted(file_name):
-        await message.reply_text(
-            "⚠️ Oops! This file type is restricted.\n"
-            "Please avoid sending adult or copyrighted content.\n"
-            "Your cooperation keeps this bot safe and available for everyone. 🙏"
-        )
-        return
-
     # Forward file to database channel
     fwd_msg = await message.forward(DATABASE_CHANNEL)
 
-    # Save file info in MongoDB
+    # Save file info
     file_record = {
-        "file_id": fwd_msg.id,  # ✅ updated for Pyrogram v2
+        "file_id": fwd_msg.id,
         "chat_id": fwd_msg.chat.id,
         "user_id": message.from_user.id,
         "file_name": file_name,
@@ -128,60 +127,18 @@ async def handle_file(client, message):
     }
     files_col.insert_one(file_record)
 
-    # Generate permanent Telegram link
-    file_link = f"https://t.me/{DATABASE_CHANNEL.strip('@')}/{fwd_msg.id}"
-    
-    # Send file info
-    sent_msg = await message.reply_text(
-        f"✅ File uploaded successfully!\n\nYour permanent Telegram link:\n{file_link}",
+    # Generate shareable start link
+    file_link = f"https://t.me/{BOT_USERNAME}?start=file_{fwd_msg.id}"
+
+    await message.reply_text(
+        f"✅ File saved!\n\n"
+        f"📂 **File Name:** `{file_name}`\n\n"
+        f"🔗 **Shareable Link:**\n{file_link}\n\n"
+        f"Anyone who clicks this link will get the file instantly from me 🤖",
         disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open File Link", url=file_link)]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📥 Open File", url=file_link)]])
     )
 
-    # ---------------- AUTO DELETE USER DM AFTER 10 MINUTES ----------------
-    await asyncio.sleep(600)  # 10 minutes
-    try:
-        await client.delete_messages(message.chat.id, [message.id, sent_msg.id])
-        files_col.update_one({"file_id": fwd_msg.id}, {"$set": {"status": "deleted"}})
-    except:
-        pass
-
-# ---------------- GET FILE BY LINK ----------------
-@app.on_message(filters.command("get"))
-async def send_file(client, message):
-    try:
-        msg_id = int(message.text.split()[1])
-        file_doc = files_col.find_one({"file_id": msg_id, "status": "active"})
-        if file_doc:
-            await client.forward_messages(
-                message.chat.id,
-                chat_id=file_doc["chat_id"],
-                message_ids=file_doc["file_id"]
-            )
-        else:
-            await message.reply_text("❌ File not found or deleted!")
-    except:
-        await message.reply_text("Usage: /get <message_id>")
-
-# ---------------- OWNER BROADCAST ----------------
-@app.on_message(filters.command("broadcast") & filters.user(OWNER_IDS))
-async def broadcast(client, message):
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        await message.reply_text("Usage: /broadcast <text>")
-        return
-
-    text_to_send = parts[1]
-    users = users_col.find({})
-    count = 0
-    for user in users:
-        try:
-            await client.send_message(user["user_id"], f"📢 Broadcast Message:\n\n{text_to_send}")
-            count += 1
-        except:
-            continue
-    await message.reply_text(f"✅ Broadcast sent to {count} users!")
-
 # ---------------- RUN BOT ----------------
-print("🔥 Advanced File to Link Bot is running...")
+print("🔥 File Sharing Bot is running...")
 app.run()
