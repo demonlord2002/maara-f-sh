@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from config import *
 import datetime
 import asyncio
+import re
 
 # ---------------- MONGO DB SETUP ----------------
 mongo = MongoClient(MONGO_URI)
@@ -39,8 +40,7 @@ async def start(client, message):
         if file_doc:
             if not await is_subscribed(message.from_user.id):
                 await message.reply_text(
-                    f"🚨 To access this file, you must first join our official channel!\n"
-                    f"👉 {SUPPORT_LINK}",
+                    f"🚨 To access this file, join our official channel!\n👉 {SUPPORT_LINK}",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
                 )
                 return
@@ -71,8 +71,7 @@ async def start(client, message):
 
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
-            f"🚨 Access Restricted!\n\nYou must join our official channel to use this bot.\n"
-            "Press **Verify** after joining.",
+            f"🚨 Access Restricted!\nJoin our official channel to use the bot.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)],
                 [InlineKeyboardButton("✅ Verify Joined", callback_data="verify_sub")]
@@ -81,9 +80,7 @@ async def start(client, message):
         return
 
     await message.reply_text(
-        f"👋 Hello {message.from_user.first_name}!\n\n"
-        "Send me any file and I will create a **unique, safe, shareable link** for you.\n"
-        "Your friends will receive the file directly from the bot when they click the link 🚀",
+        f"👋 Hello {message.from_user.first_name}!\nSend me any file and I will create a shareable link.",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Owner", url=f"https://t.me/{OWNER_USERNAME}"),
              InlineKeyboardButton("Support Channel", url=SUPPORT_LINK)]
@@ -96,7 +93,7 @@ async def verify_subscription(client, callback_query):
     user_id = callback_query.from_user.id
     if await is_subscribed(user_id):
         await callback_query.message.edit_text(
-            f"✅ Verification successful!\n\nYou can now send files and get instant safe shareable links."
+            f"✅ Verification successful! You can now send files."
         )
     else:
         await callback_query.answer(
@@ -109,7 +106,7 @@ async def verify_subscription(client, callback_query):
 async def handle_file(client, message):
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
-            f"🚨 You must join our channel to use this bot!\n\n👉 {SUPPORT_LINK}",
+            f"🚨 Join our channel to use this bot!\n👉 {SUPPORT_LINK}",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
         )
         return
@@ -135,25 +132,25 @@ async def handle_file(client, message):
 
     # Ask user to rename
     await message.reply_text(
-        f"✅ File received!\n\nDo you want to **rename** this file before getting a shareable link?\n\n"
-        f"Original: `{file_name}`\n\nExample: `kgf.mp4` or `movie.mkv`",
+        f"✅ File received!\nDo you want to **rename** this file before getting the link?\n\n"
+        f"Original: `{file_name}`\nExample: `kgf.mp4` or `movie.mkv`",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Yes, rename ✏️", callback_data=f"rename_{fwd_msg.id}")],
             [InlineKeyboardButton("No, give link 🔗", callback_data=f"link_{fwd_msg.id}")]
         ]),
-        parse_mode="markdown"
+        parse_mode="markdownv2"
     )
 
 # ---------------- RENAME CALLBACK ----------------
 @app.on_callback_query(filters.regex(r"rename_(\d+)"))
 async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
-    await callback_query.message.edit_text(
+    msg = await callback_query.message.edit_text(
         f"✏️ Send me the new file name (with extension) for your file."
     )
     # Force reply
-    await app.listen(callback_query.from_user.id, filters.text, reply_to_message_id=callback_query.message.id, group=1)
-    
+    await app.listen(callback_query.from_user.id, filters.text, group=1)
+
 # ---------------- LINK CALLBACK ----------------
 @app.on_callback_query(filters.regex(r"link_(\d+)"))
 async def send_shareable_link(client, callback_query):
@@ -164,20 +161,17 @@ async def send_shareable_link(client, callback_query):
         return
 
     file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
-    await callback_query.message.edit_text(
-        f"🔗 Here is your shareable link:\n{file_link}"
-    )
+    await callback_query.message.edit_text(f"🔗 Here is your shareable link:\n{file_link}")
 
 # ---------------- AUTO DELETE FUNCTION ----------------
 async def auto_delete_file(chat_id, msg_id, file_id):
-    await asyncio.sleep(600)  # 10 minutes
+    await asyncio.sleep(600)
     try:
         await app.delete_messages(chat_id, [msg_id])
         files_col.update_one({"file_id": file_id}, {"$set": {"status": "deleted"}})
         await app.send_message(
             chat_id,
-            "⚠️ The file has been automatically removed after 10 minutes due to copyright/security rules. "
-            "We protect all users and content. 🛡️"
+            "⚠️ File automatically removed after 10 minutes for security reasons."
         )
     except:
         pass
