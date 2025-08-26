@@ -1,11 +1,14 @@
-# 🩸 Madara Uchiha File Share Bot - Full Updated Version with MongoDB & Force Subscribe
+# 🩸 Madara Uchiha File Share Bot - Heroku Ready Version
 
+import os
+import asyncio
+import re
+import subprocess
+from dotenv import load_dotenv
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pymongo import MongoClient
-import os, time, re, asyncio, subprocess
-from dotenv import load_dotenv
-from pyrogram.errors import UserNotParticipant, FloodWait
+from pyrogram.errors import UserNotParticipant
 
 # Load environment variables
 load_dotenv()
@@ -13,15 +16,9 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
-# DB_CHANNEL_ID can be int or username
-db_channel_env = os.getenv("DB_CHANNEL_ID", "madara_db_test")
-try:
-    DB_CHANNEL_ID = int(db_channel_env)  # Try converting to int
-except ValueError:
-    DB_CHANNEL_ID = db_channel_env      # If fails, use as username
-
+DB_CHANNEL = os.getenv("DB_CHANNEL_ID")  # username or ID, string
 MONGO_URL = os.getenv("MONGO_URL")
-FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "Fallen_Angels_Team")
+FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "Fallen_Angels_Team")  # support channel username
 
 # Connect to MongoDB
 mongo = MongoClient(MONGO_URL)
@@ -55,7 +52,6 @@ async def force_subscribe_check(client, message: Message):
         return False
     return True
 
-# Decorator for force subscribe
 def require_subscription(func):
     async def wrapper(client, message: Message):
         if not await force_subscribe_check(client, message):
@@ -71,6 +67,7 @@ async def save_user(client, message: Message):
         {"$set": {"username": message.from_user.username, "first_name": message.from_user.first_name}},
         upsert=True
     )
+    print(f"[User] {message.from_user.id} tracked.")
 
 # =================== /start Command ====================
 @app.on_message(filters.private & filters.command("start"))
@@ -133,13 +130,15 @@ async def help_callback(client, callback_query):
 @require_subscription
 async def save_file(client, message: Message):
     file_id = str(message.id)
-    saved = await message.copy(chat_id=DB_CHANNEL_ID)
-    files_col.update_one({"_id": file_id}, {"$set": {"chat_id": DB_CHANNEL_ID, "msg_id": saved.id}}, upsert=True)
+    # Copy to DB_CHANNEL (username or ID)
+    saved = await message.copy(chat_id=DB_CHANNEL)
+    files_col.update_one({"_id": file_id}, {"$set": {"chat_id": DB_CHANNEL, "msg_id": saved.id}}, upsert=True)
     link = f"https://t.me/{(await app.get_me()).username}?start={file_id}"
     await message.reply(
         f"✅ File sealed!\n📎 Link: {link}\n\n⚠️ Auto-delete in 10 mins. No screenshot/no forwarding.",
         parse_mode="markdown"
     )
+    print(f"[File] {file_id} saved to {DB_CHANNEL}")
 
 # =================== Sample Trim =======================
 @app.on_message(filters.private & filters.command("sample"))
@@ -222,4 +221,6 @@ async def broadcast(client, message: Message):
 
 # =================== Bot Start =========================
 print("🩸 MADARA FILE SHARE BOT - Full Updated Version Summoning...")
+print("✅ Bot is now running! Listening for messages...")
+
 app.run()
