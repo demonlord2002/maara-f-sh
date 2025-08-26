@@ -1,23 +1,14 @@
-import os
-from dotenv import load_dotenv
+# ---------------- TELEGRAM BOT CONFIG ----------------
+API_ID = 22201946                    # Your Telegram API_ID
+API_HASH = "f4e7f0de47a09671133ecafa6920ebbe"     # Your Telegram API_HASH
+BOT_TOKEN = "7535712545:AAHFTW9Adh530PCqTXbqzsgWiQpL7ZUTrWM"   # Bot token from @BotFather
 
-# Load .env file from the same directory
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+# ---------------- CHANNELS & OWNER ----------------
+DATABASE_CHANNEL = "@madara_db_test"   # Channel where files are stored
+FORCE_SUBSCRIBE_CHANNEL = "@Fallen_Angels_Team"  # Channel users must join
+OWNER_IDS = [7813285237]                     # Your Telegram ID(s) (numeric)
+OWNER_USERNAME = "SunsetOfMe"               # Your Telegram username
+SUPPORT_LINK = "https://t.me/Fallen_Angels_Team"  # Support channel link
 
-class Config:
-    # ---------------- Telegram API Credentials ----------------
-    API_ID = int(os.getenv("API_ID", "0"))  # Replace 0 with your API_ID
-    API_HASH = os.getenv("API_HASH", "")
-    BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-
-    # ---------------- Owner IDs ----------------
-    # Comma-separated user IDs in .env
-    OWNER_IDS = list(map(int, os.getenv("OWNER_IDS", "").split(",")))
-
-    # ---------------- Database ----------------
-    # ---------------- Database ----------------
-    DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID", "madara_db_test")  # Can be channel username
-    MONGO_URL = os.getenv("MONGO_URL", "")  # MongoDB URI
-
-    # ---------------- Force Subscribe Channel ----------------
-    FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "Fallen_Angels_Team")  # Channel username
+# ---------------- MONGO DB ----------------
+MONGO_URI = "mongodb+srv://rubesh08virat:rubesh08virat@cluster0.d33p1rm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
