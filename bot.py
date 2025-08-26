@@ -1,14 +1,11 @@
-# 🩸 Madara Uchiha File Share Bot - Heroku Ready Version
+# 🩸 Madara Uchiha File Share Bot - Heroku/MongoDB Ready
 
-import os
-import asyncio
-import re
-import subprocess
-from dotenv import load_dotenv
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pymongo import MongoClient
-from pyrogram.errors import UserNotParticipant
+import os, time, re, asyncio, subprocess
+from dotenv import load_dotenv
+from pyrogram.errors import UserNotParticipant, FloodWait, RPCError
 
 # Load environment variables
 load_dotenv()
@@ -16,9 +13,9 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
-DB_CHANNEL = os.getenv("DB_CHANNEL_ID")  # username or ID, string
+DB_CHANNEL = os.getenv("DB_CHANNEL_ID")  # username or numeric ID
 MONGO_URL = os.getenv("MONGO_URL")
-FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "Fallen_Angels_Team")  # support channel username
+FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "Fallen_Angels_Team")
 
 # Connect to MongoDB
 mongo = MongoClient(MONGO_URL)
@@ -67,7 +64,6 @@ async def save_user(client, message: Message):
         {"$set": {"username": message.from_user.username, "first_name": message.from_user.first_name}},
         upsert=True
     )
-    print(f"[User] {message.from_user.id} tracked.")
 
 # =================== /start Command ====================
 @app.on_message(filters.private & filters.command("start"))
@@ -78,7 +74,11 @@ async def start_cmd(client, message: Message):
         file_id = args[1]
         data = files_col.find_one({"_id": file_id})
         if data:
-            await client.copy_message(chat_id=message.chat.id, from_chat_id=data["chat_id"], message_id=data["msg_id"])
+            try:
+                await client.copy_message(chat_id=message.chat.id, from_chat_id=data["chat_id"], message_id=data["msg_id"])
+            except RPCError:
+                await message.reply("❌ Failed to retrieve file. Contact owner.")
+                return
             notice = await client.send_message(
                 message.chat.id,
                 "⚠️ **Notice:** This file is copyrighted.\nAuto-delete in 10 minutes.\n❌ No screenshots ❌ No forwarding",
@@ -130,15 +130,17 @@ async def help_callback(client, callback_query):
 @require_subscription
 async def save_file(client, message: Message):
     file_id = str(message.id)
-    # Copy to DB_CHANNEL (username or ID)
-    saved = await message.copy(chat_id=DB_CHANNEL)
+    try:
+        saved = await message.copy(chat_id=DB_CHANNEL)
+    except RPCError:
+        await message.reply("❌ Failed to save file to channel. Make sure bot is admin.")
+        return
     files_col.update_one({"_id": file_id}, {"$set": {"chat_id": DB_CHANNEL, "msg_id": saved.id}}, upsert=True)
     link = f"https://t.me/{(await app.get_me()).username}?start={file_id}"
     await message.reply(
         f"✅ File sealed!\n📎 Link: {link}\n\n⚠️ Auto-delete in 10 mins. No screenshot/no forwarding.",
         parse_mode="markdown"
     )
-    print(f"[File] {file_id} saved to {DB_CHANNEL}")
 
 # =================== Sample Trim =======================
 @app.on_message(filters.private & filters.command("sample"))
@@ -182,18 +184,14 @@ async def sample_trim(client, message: Message):
 async def broadcast(client, message: Message):
     if message.from_user.id not in OWNER_IDS:
         return await message.reply("❌ Only the owner can use /broadcast.")
-
     if len(message.command) < 2 and not message.reply_to_message:
         return await message.reply("⚠️ Usage:\n/broadcast Your message\nOr reply to a file/video/document/photo to broadcast.")
-
     all_users = list(users_col.find({}))
     if not all_users:
         return await message.reply("⚠️ No users to broadcast.")
-
     reply_msg = message.reply_to_message
     success, failed = 0, 0
     msg_status = await message.reply(f"🚀 Broadcasting to {len(all_users)} users...")
-
     for user in all_users:
         user_id = user["_id"]
         try:
@@ -216,11 +214,9 @@ async def broadcast(client, message: Message):
         except:
             failed += 1
             continue
-
     await msg_status.edit(f"✅ Broadcast completed!\nSuccess: {success}\nFailed: {failed}")
 
 # =================== Bot Start =========================
 print("🩸 MADARA FILE SHARE BOT - Full Updated Version Summoning...")
 print("✅ Bot is now running! Listening for messages...")
-
 app.run()
