@@ -1,7 +1,6 @@
 pyrogram==2.0.106
-tgcrypto
-pymongo
-motor
-dnspython
+tgcrypto==1.2.4
+pymongo==4.4.1
+motor==3.1.1
+dnspython==2.3.0
 python-dotenv==1.1.1
-asyncio==3.4.3
