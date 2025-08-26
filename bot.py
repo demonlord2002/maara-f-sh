@@ -45,25 +45,15 @@ async def start(client, message):
                 )
                 return
 
-            # Forward file
+            # Forward file using correct syntax
             sent_msg = await client.forward_messages(
-                message.chat.id,
-                chat_id=file_doc["chat_id"],
+                chat_id=message.chat.id,
+                from_chat_id=file_doc["chat_id"],
                 message_ids=file_doc["file_id"]
             )
 
             # Auto-delete after 10 minutes
-            await asyncio.sleep(600)
-            try:
-                await client.delete_messages(message.chat.id, [sent_msg.id])
-                files_col.update_one({"file_id": file_id}, {"$set": {"status": "deleted"}})
-                await client.send_message(
-                    message.chat.id,
-                    "⚠️ The file you requested has been automatically removed after 10 minutes due to copyright/security policies. "
-                    "We keep our bot safe and fair for everyone. 🛡️"
-                )
-            except:
-                pass
+            asyncio.create_task(auto_delete_file(message.chat.id, sent_msg.id, file_id))
             return
         else:
             await message.reply_text("❌ Sorry! This file is no longer available.")
@@ -126,13 +116,9 @@ async def handle_file(client, message):
         return
 
     # Get file info
-    file_name = None
-    if message.document:
-        file_name = message.document.file_name
-    elif message.video:
-        file_name = message.video.file_name
-    elif message.audio:
-        file_name = message.audio.file_name
+    file_name = message.document.file_name if message.document else \
+                message.video.file_name if message.video else \
+                message.audio.file_name
 
     # Forward file to database channel
     fwd_msg = await message.forward(DATABASE_CHANNEL)
@@ -143,7 +129,7 @@ async def handle_file(client, message):
         "chat_id": fwd_msg.chat.id,
         "user_id": message.from_user.id,
         "file_name": file_name,
-        "timestamp": datetime.datetime.now(datetime.UTC),
+        "timestamp": datetime.datetime.now(datetime.timezone.utc),
         "status": "active"
     }
     files_col.insert_one(file_record)
@@ -155,10 +141,27 @@ async def handle_file(client, message):
         f"✅ File saved!\n\n"
         f"📂 **File Name:** `{file_name}`\n\n"
         f"🔗 **Unique Shareable Link:**\n{file_link}\n\n"
-        f"⚠️ Note: This link is safe and temporary. File will be removed automatically after 10 minutes for security & copyright reasons.",
+        f"⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes due to copyright/security reasons.",
         disable_web_page_preview=True,
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📥 Open File", url=file_link)]])
     )
+
+    # Schedule auto-delete
+    asyncio.create_task(auto_delete_file(message.chat.id, fwd_msg.id, fwd_msg.id))
+
+# ---------------- AUTO DELETE FUNCTION ----------------
+async def auto_delete_file(chat_id, msg_id, file_id):
+    await asyncio.sleep(600)  # 10 minutes
+    try:
+        await app.delete_messages(chat_id, [msg_id])
+        files_col.update_one({"file_id": file_id}, {"$set": {"status": "deleted"}})
+        await app.send_message(
+            chat_id,
+            "⚠️ The file has been automatically removed after 10 minutes due to copyright/security rules. "
+            "We protect all users and content. 🛡️"
+        )
+    except:
+        pass
 
 # ---------------- RUN BOT ----------------
 print("🔥 File Sharing Bot is running...")
