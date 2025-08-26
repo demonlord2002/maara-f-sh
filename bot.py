@@ -1,5 +1,5 @@
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
 from pymongo import MongoClient
 from config import *
@@ -55,7 +55,6 @@ async def start(client, message):
                 from_chat_id=file_doc["chat_id"],
                 message_id=file_doc["file_id"]
             )
-
             asyncio.create_task(auto_delete_file(message.chat.id, sent_msg.id, file_id))
             return
         else:
@@ -123,7 +122,6 @@ async def handle_file(client, message):
     file_name = message.document.file_name if message.document else \
                 message.video.file_name if message.video else \
                 message.audio.file_name
-
     safe_file_name = escape_markdown(file_name)
 
     fwd_msg = await app.copy_message(DATABASE_CHANNEL, message.chat.id, message.id)
@@ -152,10 +150,37 @@ async def handle_file(client, message):
 @app.on_callback_query(filters.regex(r"rename_(\d+)"))
 async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
-    await callback_query.message.edit_text(
-        f"✏️ Send me the new file name (with extension) for your file."
+    users_col.update_one(
+        {"user_id": callback_query.from_user.id},
+        {"$set": {"renaming_file_id": file_id}}
     )
-    await app.listen(callback_query.from_user.id, filters.text, reply_to_message_id=callback_query.message.id, group=1)
+    await callback_query.message.edit_text(
+        "✏️ Send me the new file name (with extension) for your file."
+    )
+
+# ---------------- HANDLE NEW FILE NAME ----------------
+@app.on_message(filters.text)
+async def handle_rename(client, message):
+    user_doc = users_col.find_one({"user_id": message.from_user.id})
+    if not user_doc or "renaming_file_id" not in user_doc:
+        return
+
+    file_id = user_doc["renaming_file_id"]
+    new_name = message.text.strip()
+
+    files_col.update_one({"file_id": file_id}, {"$set": {"file_name": new_name}})
+    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
+
+    await message.reply_text(
+        f"✅ File saved!\n\n"
+        f"📂 File Name: {escape_markdown(new_name)}\n\n"
+        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
+        "⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes for security reasons.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Open File", url=file_link)]]),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    users_col.update_one({"user_id": message.from_user.id}, {"$unset": {"renaming_file_id": ""}})
 
 # ---------------- LINK CALLBACK ----------------
 @app.on_callback_query(filters.regex(r"link_(\d+)"))
@@ -166,9 +191,16 @@ async def send_shareable_link(client, callback_query):
         await callback_query.message.edit_text("❌ File not found or deleted!")
         return
 
+    file_name = file_doc["file_name"]
     file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
+
     await callback_query.message.edit_text(
-        f"🔗 Here is your shareable link:\n{file_link}"
+        f"✅ File saved!\n\n"
+        f"📂 File Name: {escape_markdown(file_name)}\n\n"
+        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
+        "⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes for security reasons.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Open File", url=file_link)]]),
+        parse_mode=ParseMode.MARKDOWN
     )
 
 # ---------------- AUTO DELETE FUNCTION ----------------
