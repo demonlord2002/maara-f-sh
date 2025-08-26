@@ -4,7 +4,7 @@ import re
 # ---------------- TELEGRAM BOT CONFIG ----------------
 API_ID = int(os.getenv("API_ID", 22201946))
 API_HASH = os.getenv("API_HASH", "f4e7f0de47a09671133ecafa6920ebbe")
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7535712545:AAHFTW9Adh530PCqTXbqsgWiQpL7ZUTrWM")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7535712545:AAGxGQMONTyWtDLtdecIIuX_od_xFj8GYMw")
 
 # ---------------- CHANNELS & OWNER ----------------
 DATABASE_CHANNEL = os.getenv("DATABASE_CHANNEL", "@madara_db_test")
