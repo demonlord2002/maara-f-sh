@@ -13,9 +13,15 @@ API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
-DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID"))
+# DB_CHANNEL_ID can be int or username
+db_channel_env = os.getenv("DB_CHANNEL_ID", "madara_db_test")
+try:
+    DB_CHANNEL_ID = int(db_channel_env)  # Try converting to int
+except ValueError:
+    DB_CHANNEL_ID = db_channel_env      # If fails, use as username
+
 MONGO_URL = os.getenv("MONGO_URL")
-FORCE_CHANNEL = "Fallen_Angels_Team"  # Your channel username
+FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "Fallen_Angels_Team")
 
 # Connect to MongoDB
 mongo = MongoClient(MONGO_URL)
