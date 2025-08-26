@@ -35,7 +35,7 @@ def is_restricted(file_name):
 # ---------------- START COMMAND ----------------
 @app.on_message(filters.command("start"))
 async def start(client, message):
-    # Store user info for broadcasts
+    # store user info for broadcasts
     users_col.update_one(
         {"user_id": message.from_user.id},
         {"$set": {
@@ -58,18 +58,16 @@ async def start(client, message):
         )
         return
 
-    # Normal start message with Owner, Support, Premium, and Help buttons
+    # Normal start message
     await message.reply_text(
         f"👋 Hello {message.from_user.first_name}!\n\n"
-        "Forward any file to me and I will generate a **permanent Telegram shareable link**!\n\n"
+        "Forward any file to me and I will instantly generate a **permanent Telegram shareable link**!\n\n"
         "⚡ Premium: links never expire.\n"
-        "📌 Stay subscribed for updates and uninterrupted service.\n\n"
-        "ℹ️ Need help? Click Help below.",
+        "📌 Stay subscribed to our channel for updates and uninterrupted service.",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Owner", url=f"https://t.me/{OWNER_USERNAME}"),
              InlineKeyboardButton("Support Channel", url=SUPPORT_LINK)],
-            [InlineKeyboardButton("Premium Access 💎", url=SUPPORT_LINK),
-             InlineKeyboardButton("Help ❓", callback_data="help")]
+            [InlineKeyboardButton("Premium Access 💎", url=SUPPORT_LINK)]
         ])
     )
 
@@ -88,29 +86,6 @@ async def verify_subscription(client, callback_query):
             "❌ You are not yet subscribed! Please join the channel first.",
             show_alert=True
         )
-
-# ---------------- HELP BUTTON ----------------
-@app.on_callback_query(filters.regex("help"))
-async def help_button(client, callback_query):
-    await callback_query.message.edit_text(
-        "ℹ️ **Bot Usage Help**\n\n"
-        "1. Forward any document, video, or audio to the bot.\n"
-        "2. The bot will give you a **permanent Telegram link**.\n"
-        "3. Links are protected (no forwarding / screenshot).\n"
-        "4. Files auto-delete from your chat after 10 minutes.\n"
-        "5. Use /get <message_id> to fetch a file by its ID.\n"
-        "6. Only adult/copyright-free content allowed.\n\n"
-        "⚡ Premium users enjoy never-expiring links.\n"
-        "📌 Keep subscribed to our support channel for updates.",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Back to Start", callback_data="back_start")]
-        ])
-    )
-
-# ---------------- BACK TO START BUTTON ----------------
-@app.on_callback_query(filters.regex("back_start"))
-async def back_to_start(client, callback_query):
-    await start(client, callback_query.message)
 
 # ---------------- FILE HANDLER ----------------
 @app.on_message(filters.document | filters.video | filters.audio)
@@ -148,19 +123,19 @@ async def handle_file(client, message):
     }
     files_col.insert_one(file_record)
 
-    # Generate permanent shareable link (fast/direct download simulation)
-    file_link = f"{WEB_URL}/file/{fwd_msg.message_id}"
-
-    # Send message with protect_content to prevent forwarding / screenshot
+    # Generate permanent Telegram link
+    file_link = f"https://t.me/{DATABASE_CHANNEL.strip('@')}/{fwd_msg.message_id}"
+    
+    # Send file info with protect_content to disable forwarding/screenshot
     sent_msg = await message.reply_text(
-        f"✅ File uploaded successfully!\n\nYour permanent shareable link:\n{file_link}",
+        f"✅ File uploaded successfully!\n\nYour permanent Telegram link:\n{file_link}",
         disable_web_page_preview=True,
         protect_content=True,
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open File Link", url=file_link)]])
     )
 
-    # Auto-delete user DM after 10 minutes
-    await asyncio.sleep(600)
+    # ---------------- AUTO DELETE USER DM AFTER 10 MINUTES ----------------
+    await asyncio.sleep(600)  # 10 minutes
     try:
         await client.delete_messages(message.chat.id, message.message_id)
         await client.delete_messages(message.chat.id, sent_msg.message_id)
