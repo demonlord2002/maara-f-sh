@@ -20,7 +20,7 @@ app = Client(
 )
 
 # ---------------- FORCE SUBSCRIBE CHECK ----------------
-async def is_subscribed(user_id):
+async def is_subscribed(user_id: int) -> bool:
     try:
         member = await app.get_chat_member(FORCE_SUBSCRIBE_CHANNEL, user_id)
         return member.status not in ["left", "kicked"]
@@ -28,7 +28,7 @@ async def is_subscribed(user_id):
         return False
 
 # ---------------- CONTENT RESTRICT CHECK ----------------
-def is_restricted(file_name):
+def is_restricted(file_name: str) -> bool:
     restricted_keywords = ["porn", "xxx", "adult", "18+"]  # extendable
     return any(word in file_name.lower() for word in restricted_keywords)
 
@@ -78,8 +78,7 @@ async def verify_subscription(client, callback_query):
     if await is_subscribed(user_id):
         await callback_query.message.edit_text(
             f"✅ Verification successful!\n\n"
-            "You can now forward any file to receive a permanent shareable Telegram link.",
-            reply_markup=None
+            "You can now forward any file to receive a permanent shareable Telegram link."
         )
     else:
         await callback_query.answer(
@@ -98,10 +97,16 @@ async def handle_file(client, message):
         return
 
     # Determine file name
-    file_name = message.document.file_name if message.document else message.video.file_name if message.video else message.audio.file_name
+    file_name = None
+    if message.document:
+        file_name = message.document.file_name
+    elif message.video:
+        file_name = message.video.file_name
+    elif message.audio:
+        file_name = message.audio.file_name
 
     # Polite adult content restriction
-    if is_restricted(file_name):
+    if file_name and is_restricted(file_name):
         await message.reply_text(
             "⚠️ Oops! This file type is restricted.\n"
             "Please avoid sending adult or copyrighted content.\n"
@@ -114,7 +119,7 @@ async def handle_file(client, message):
 
     # Save file info in MongoDB
     file_record = {
-        "file_id": fwd_msg.message_id,
+        "file_id": fwd_msg.id,  # ✅ updated for Pyrogram v2
         "chat_id": fwd_msg.chat.id,
         "user_id": message.from_user.id,
         "file_name": file_name,
@@ -124,22 +129,20 @@ async def handle_file(client, message):
     files_col.insert_one(file_record)
 
     # Generate permanent Telegram link
-    file_link = f"https://t.me/{DATABASE_CHANNEL.strip('@')}/{fwd_msg.message_id}"
+    file_link = f"https://t.me/{DATABASE_CHANNEL.strip('@')}/{fwd_msg.id}"
     
-    # Send file info with protect_content to disable forwarding/screenshot
+    # Send file info
     sent_msg = await message.reply_text(
         f"✅ File uploaded successfully!\n\nYour permanent Telegram link:\n{file_link}",
         disable_web_page_preview=True,
-        protect_content=True,
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open File Link", url=file_link)]])
     )
 
     # ---------------- AUTO DELETE USER DM AFTER 10 MINUTES ----------------
     await asyncio.sleep(600)  # 10 minutes
     try:
-        await client.delete_messages(message.chat.id, message.message_id)
-        await client.delete_messages(message.chat.id, sent_msg.message_id)
-        files_col.update_one({"file_id": fwd_msg.message_id}, {"$set": {"status": "deleted"}})
+        await client.delete_messages(message.chat.id, [message.id, sent_msg.id])
+        files_col.update_one({"file_id": fwd_msg.id}, {"$set": {"status": "deleted"}})
     except:
         pass
 
@@ -153,8 +156,7 @@ async def send_file(client, message):
             await client.forward_messages(
                 message.chat.id,
                 chat_id=file_doc["chat_id"],
-                message_ids=file_doc["file_id"],
-                protect_content=True
+                message_ids=file_doc["file_id"]
             )
         else:
             await message.reply_text("❌ File not found or deleted!")
@@ -164,17 +166,17 @@ async def send_file(client, message):
 # ---------------- OWNER BROADCAST ----------------
 @app.on_message(filters.command("broadcast") & filters.user(OWNER_IDS))
 async def broadcast(client, message):
-    text_to_send = message.text.split(maxsplit=1)
-    if len(text_to_send) < 2:
-        await message.reply_text("Usage: /broadcast <text or link or file>")
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text("Usage: /broadcast <text>")
         return
-    text_to_send = text_to_send[1]
 
+    text_to_send = parts[1]
     users = users_col.find({})
     count = 0
     for user in users:
         try:
-            await client.send_message(user["user_id"], f"📢 Broadcast Message:\n\n{text_to_send}", protect_content=True)
+            await client.send_message(user["user_id"], f"📢 Broadcast Message:\n\n{text_to_send}")
             count += 1
         except:
             continue
