@@ -3,3 +3,5 @@ tgcrypto
 pymongo
 motor
 dnspython
+python-dotenv==1.1.1
+asyncio==3.4.3
