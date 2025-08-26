@@ -1,7 +1,7 @@
 {
   "name": "MadaraFileShareBot",
   "description": "A Telegram file sharing bot using Pyrogram and MongoDB.",
-  "repository": "https://github.com/yourusername/madara-file-share-bot",
+  "repository": "https://github.com/demonlord2002/maara-f-sh",
   "keywords": ["telegram", "file-bot", "pyrogram", "mongodb", "madara"],
   "buildpacks": [
     { "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git" },
@@ -29,13 +29,18 @@
       "required": true
     },
     "DB_CHANNEL_ID": {
-      "description": "Telegram Channel ID for storing files (e.g., -1001234567890)",
-      "value": "madara_db_test",
+      "description": "Telegram Channel ID for storing files (must be numeric, e.g., -1001234567890)",
+      "value": "-1002718440283",
       "required": true
     },
     "MONGO_URL": {
       "description": "MongoDB URI for storing permanent file records",
       "value": "mongodb+srv://xarwin2:xarwin2002@cluster0.qmetx2m.mongodb.net/?retryWrites=true&w=majority",
+      "required": true
+    },
+    "FORCE_CHANNEL": {
+      "description": "Telegram channel username for force subscribe",
+      "value": "Fallen_Angels_Team",
       "required": true
     }
   },
