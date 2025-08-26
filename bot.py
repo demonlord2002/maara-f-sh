@@ -1,222 +1,210 @@
-# 🩸 Madara Uchiha File Share Bot - Heroku/MongoDB Ready
-
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pymongo import MongoClient
-import os, time, re, asyncio, subprocess
-from dotenv import load_dotenv
-from pyrogram.errors import UserNotParticipant, FloodWait, RPCError
+from config import *
+import datetime
+import asyncio
 
-# Load environment variables
-load_dotenv()
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_IDS = list(map(int, os.getenv("OWNER_IDS").split(",")))
-DB_CHANNEL = os.getenv("DB_CHANNEL_ID")  # username or numeric ID
-MONGO_URL = os.getenv("MONGO_URL")
-FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "Fallen_Angels_Team")
-
-# Connect to MongoDB
-mongo = MongoClient(MONGO_URL)
-db = mongo["madara_bot"]
+# ---------------- MONGO DB SETUP ----------------
+mongo = MongoClient(MONGO_URI)
+db = mongo["file_share_bot"]
 files_col = db["files"]
 users_col = db["users"]
 
-# Initialize bot
-app = Client("madara_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# ---------------- INIT BOT ----------------
+app = Client(
+    "file_share_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
 
-# ================= Utility Functions ===================
-def get_duration_seconds(start, end):
-    def to_sec(t): return sum(x * int(t) for x, t in zip([3600, 60, 1], t.split(":")))
-    return to_sec(end) - to_sec(start)
-
-async def is_subscribed(client, user_id):
+# ---------------- FORCE SUBSCRIBE CHECK ----------------
+async def is_subscribed(user_id):
     try:
-        member = await client.get_chat_member(FORCE_CHANNEL, user_id)
-        return member.status != "left"
-    except UserNotParticipant:
-        return False
+        member = await app.get_chat_member(FORCE_SUBSCRIBE_CHANNEL, user_id)
+        return member.status not in ["left", "kicked"]
     except:
         return False
 
-async def force_subscribe_check(client, message: Message):
-    if not await is_subscribed(client, message.from_user.id):
-        kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Join Support Channel ✅", url=f"https://t.me/{FORCE_CHANNEL}")]]
-        )
-        await message.reply(f"🚨 You must join our channel @{FORCE_CHANNEL} to use this bot.", reply_markup=kb)
-        return False
-    return True
+# ---------------- CONTENT RESTRICT CHECK ----------------
+def is_restricted(file_name):
+    restricted_keywords = ["porn", "xxx", "adult", "18+"]  # extendable
+    return any(word in file_name.lower() for word in restricted_keywords)
 
-def require_subscription(func):
-    async def wrapper(client, message: Message):
-        if not await force_subscribe_check(client, message):
-            return
-        return await func(client, message)
-    return wrapper
-
-# =================== User Tracking =====================
-@app.on_message(filters.private)
-async def save_user(client, message: Message):
+# ---------------- START COMMAND ----------------
+@app.on_message(filters.command("start"))
+async def start(client, message):
+    # Store user info for broadcasts
     users_col.update_one(
-        {"_id": message.from_user.id},
-        {"$set": {"username": message.from_user.username, "first_name": message.from_user.first_name}},
+        {"user_id": message.from_user.id},
+        {"$set": {
+            "username": message.from_user.username,
+            "first_name": message.from_user.first_name,
+            "last_name": message.from_user.last_name
+        }},
         upsert=True
     )
 
-# =================== /start Command ====================
-@app.on_message(filters.private & filters.command("start"))
-@require_subscription
-async def start_cmd(client, message: Message):
-    args = message.text.split()
-    if len(args) == 2:
-        file_id = args[1]
-        data = files_col.find_one({"_id": file_id})
-        if data:
-            try:
-                await client.copy_message(chat_id=message.chat.id, from_chat_id=data["chat_id"], message_id=data["msg_id"])
-            except RPCError:
-                await message.reply("❌ Failed to retrieve file. Contact owner.")
-                return
-            notice = await client.send_message(
-                message.chat.id,
-                "⚠️ **Notice:** This file is copyrighted.\nAuto-delete in 10 minutes.\n❌ No screenshots ❌ No forwarding",
-                parse_mode="markdown"
-            )
-            await asyncio.sleep(600)
-            try:
-                await client.delete_messages(chat_id=message.chat.id, message_ids=[data["msg_id"], notice.id])
-            except: pass
-        else:
-            await message.reply("❌ File not found or expired.")
+    # Force subscribe check
+    if not await is_subscribed(message.from_user.id):
+        await message.reply_text(
+            f"🚨 Access Restricted!\n\nTo use this bot, you must join our official channel first.\n"
+            "After joining, press **Verify** to continue.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)],
+                [InlineKeyboardButton("✅ Verify Joined", callback_data="verify_sub")]
+            ])
+        )
         return
 
-    kb = InlineKeyboardMarkup(
-        [[
-            InlineKeyboardButton("👑 Owner", url="https://t.me/SunsetOfMe"),
-            InlineKeyboardButton("💬 Help", callback_data="help"),
-            InlineKeyboardButton("📢 Support Channel", url=f"https://t.me/{FORCE_CHANNEL}")
-        ]]
-    )
-    await message.reply(
-        "🩸 **Madara Uchiha File Share Bot**\n\n"
-        "Drop your files like a shinobi, share like a legend 💀\n"
-        "All Uchihas must join the Support Channel to generate links.",
-        reply_markup=kb,
-        parse_mode="markdown"
+    # Normal start message with Owner, Support, Premium, and Help buttons
+    await message.reply_text(
+        f"👋 Hello {message.from_user.first_name}!\n\n"
+        "Forward any file to me and I will generate a **permanent Telegram shareable link**!\n\n"
+        "⚡ Premium: links never expire.\n"
+        "📌 Stay subscribed for updates and uninterrupted service.\n\n"
+        "ℹ️ Need help? Click Help below.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Owner", url=f"https://t.me/{OWNER_USERNAME}"),
+             InlineKeyboardButton("Support Channel", url=SUPPORT_LINK)],
+            [InlineKeyboardButton("Premium Access 💎", url=SUPPORT_LINK),
+             InlineKeyboardButton("Help ❓", callback_data="help")]
+        ])
     )
 
-# =================== Help Button =======================
+# ---------------- VERIFY SUB BUTTON ----------------
+@app.on_callback_query(filters.regex("verify_sub"))
+async def verify_subscription(client, callback_query):
+    user_id = callback_query.from_user.id
+    if await is_subscribed(user_id):
+        await callback_query.message.edit_text(
+            f"✅ Verification successful!\n\n"
+            "You can now forward any file to receive a permanent shareable Telegram link.",
+            reply_markup=None
+        )
+    else:
+        await callback_query.answer(
+            "❌ You are not yet subscribed! Please join the channel first.",
+            show_alert=True
+        )
+
+# ---------------- HELP BUTTON ----------------
 @app.on_callback_query(filters.regex("help"))
-async def help_callback(client, callback_query):
-    await callback_query.answer()
-    await callback_query.message.edit(
-        "**🩸 MADARA UCHIHA - COMMAND SCROLL ⚔️**\n\n"
-        "**USER COMMANDS:**\n"
-        "🧿 /start – Access shared files using links\n"
-        "📎 Send a file – Get a secret sharing link\n\n"
-        "**OWNER COMMANDS:**\n"
-        "✂️ /sample HH:MM:SS to HH:MM:SS – Trim sample from replied video (Owner only)\n"
-        "👥 /addusers <id> – Grant special access\n"
-        "🚫 /delusers <id> – Revoke a user\n"
-        "📜 /getusers – Show all allowed users\n"
-        "📢 /broadcast <msg> – DM all active users\n\n"
-        "⚠️ Files are auto-deleted after 10 mins. ❌ No screenshots ❌ No forwarding"
+async def help_button(client, callback_query):
+    await callback_query.message.edit_text(
+        "ℹ️ **Bot Usage Help**\n\n"
+        "1. Forward any document, video, or audio to the bot.\n"
+        "2. The bot will give you a **permanent Telegram link**.\n"
+        "3. Links are protected (no forwarding / screenshot).\n"
+        "4. Files auto-delete from your chat after 10 minutes.\n"
+        "5. Use /get <message_id> to fetch a file by its ID.\n"
+        "6. Only adult/copyright-free content allowed.\n\n"
+        "⚡ Premium users enjoy never-expiring links.\n"
+        "📌 Keep subscribed to our support channel for updates.",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Back to Start", callback_data="back_start")]
+        ])
     )
 
-# =================== Save Files ========================
-@app.on_message(filters.private & (filters.document | filters.video | filters.audio | filters.photo))
-@require_subscription
-async def save_file(client, message: Message):
-    file_id = str(message.id)
-    try:
-        saved = await message.copy(chat_id=DB_CHANNEL)
-    except RPCError:
-        await message.reply("❌ Failed to save file to channel. Make sure bot is admin.")
+# ---------------- BACK TO START BUTTON ----------------
+@app.on_callback_query(filters.regex("back_start"))
+async def back_to_start(client, callback_query):
+    await start(client, callback_query.message)
+
+# ---------------- FILE HANDLER ----------------
+@app.on_message(filters.document | filters.video | filters.audio)
+async def handle_file(client, message):
+    if not await is_subscribed(message.from_user.id):
+        await message.reply_text(
+            f"🚨 You must join our channel to use this bot!\n\n👉 {SUPPORT_LINK}",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
+        )
         return
-    files_col.update_one({"_id": file_id}, {"$set": {"chat_id": DB_CHANNEL, "msg_id": saved.id}}, upsert=True)
-    link = f"https://t.me/{(await app.get_me()).username}?start={file_id}"
-    await message.reply(
-        f"✅ File sealed!\n📎 Link: {link}\n\n⚠️ Auto-delete in 10 mins. No screenshot/no forwarding.",
-        parse_mode="markdown"
+
+    # Determine file name
+    file_name = message.document.file_name if message.document else message.video.file_name if message.video else message.audio.file_name
+
+    # Polite adult content restriction
+    if is_restricted(file_name):
+        await message.reply_text(
+            "⚠️ Oops! This file type is restricted.\n"
+            "Please avoid sending adult or copyrighted content.\n"
+            "Your cooperation keeps this bot safe and available for everyone. 🙏"
+        )
+        return
+
+    # Forward file to database channel
+    fwd_msg = await message.forward(DATABASE_CHANNEL)
+
+    # Save file info in MongoDB
+    file_record = {
+        "file_id": fwd_msg.message_id,
+        "chat_id": fwd_msg.chat.id,
+        "user_id": message.from_user.id,
+        "file_name": file_name,
+        "timestamp": datetime.datetime.utcnow(),
+        "status": "active"
+    }
+    files_col.insert_one(file_record)
+
+    # Generate permanent shareable link (fast/direct download simulation)
+    file_link = f"{WEB_URL}/file/{fwd_msg.message_id}"
+
+    # Send message with protect_content to prevent forwarding / screenshot
+    sent_msg = await message.reply_text(
+        f"✅ File uploaded successfully!\n\nYour permanent shareable link:\n{file_link}",
+        disable_web_page_preview=True,
+        protect_content=True,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open File Link", url=file_link)]])
     )
 
-# =================== Sample Trim =======================
-@app.on_message(filters.private & filters.command("sample"))
-async def sample_trim(client, message: Message):
-    if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Only the owner can use /sample.")
-    if not message.reply_to_message or not (message.reply_to_message.video or message.reply_to_message.document):
-        return await message.reply("⚠️ Please reply to a video with:\n/sample HH:MM:SS to HH:MM:SS")
-    match = re.search(r"(\d{2}:\d{2}:\d{2})\s+to\s+(\d{2}:\d{2}:\d{2})", message.text)
-    if not match:
-        return await message.reply("❌ Invalid format. Use:\n/sample 00:10:00 to 00:10:30")
-    start, end = match.group(1), match.group(2)
-    duration = get_duration_seconds(start, end)
-    if duration <= 0 or duration > 60:
-        return await message.reply("⚠️ Duration must be 1–60 seconds.")
-    msg = await message.reply("📥 Downloading video...")
+    # Auto-delete user DM after 10 minutes
+    await asyncio.sleep(600)
     try:
-        input_path = await message.reply_to_message.download()
+        await client.delete_messages(message.chat.id, message.message_id)
+        await client.delete_messages(message.chat.id, sent_msg.message_id)
+        files_col.update_one({"file_id": fwd_msg.message_id}, {"$set": {"status": "deleted"}})
     except:
-        return await msg.edit("❌ Download failed.")
-    output_path = "sample_clip.mp4"
-    await msg.edit("✂️ Trimming sample video (fast mode)...")
-    fast_cmd = ["ffmpeg", "-ss", start, "-i", input_path, "-t", str(duration), "-c", "copy", output_path, "-y"]
-    process = await asyncio.create_subprocess_exec(*fast_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    await process.communicate()
-    if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
-        await msg.edit("⚠️ Fast trim failed, retrying with safe mode...")
-        slow_cmd = ["ffmpeg", "-i", input_path, "-ss", start, "-t", str(duration), "-c:v", "libx264", "-c:a", "aac", output_path, "-y"]
-        process = await asyncio.create_subprocess_exec(*slow_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        await process.communicate()
-    if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
-        os.remove(input_path)
-        return await msg.edit("❌ Failed to generate sample.")
-    await msg.edit("📤 Uploading sample...")
-    await client.send_video(chat_id=message.chat.id, video=output_path, caption=f"✂️ Sample clip {start} to {end}")
-    os.remove(input_path)
-    os.remove(output_path)
+        pass
 
-# =================== Broadcast =========================
-@app.on_message(filters.private & filters.command("broadcast"))
-async def broadcast(client, message: Message):
-    if message.from_user.id not in OWNER_IDS:
-        return await message.reply("❌ Only the owner can use /broadcast.")
-    if len(message.command) < 2 and not message.reply_to_message:
-        return await message.reply("⚠️ Usage:\n/broadcast Your message\nOr reply to a file/video/document/photo to broadcast.")
-    all_users = list(users_col.find({}))
-    if not all_users:
-        return await message.reply("⚠️ No users to broadcast.")
-    reply_msg = message.reply_to_message
-    success, failed = 0, 0
-    msg_status = await message.reply(f"🚀 Broadcasting to {len(all_users)} users...")
-    for user in all_users:
-        user_id = user["_id"]
+# ---------------- GET FILE BY LINK ----------------
+@app.on_message(filters.command("get"))
+async def send_file(client, message):
+    try:
+        msg_id = int(message.text.split()[1])
+        file_doc = files_col.find_one({"file_id": msg_id, "status": "active"})
+        if file_doc:
+            await client.forward_messages(
+                message.chat.id,
+                chat_id=file_doc["chat_id"],
+                message_ids=file_doc["file_id"],
+                protect_content=True
+            )
+        else:
+            await message.reply_text("❌ File not found or deleted!")
+    except:
+        await message.reply_text("Usage: /get <message_id>")
+
+# ---------------- OWNER BROADCAST ----------------
+@app.on_message(filters.command("broadcast") & filters.user(OWNER_IDS))
+async def broadcast(client, message):
+    text_to_send = message.text.split(maxsplit=1)
+    if len(text_to_send) < 2:
+        await message.reply_text("Usage: /broadcast <text or link or file>")
+        return
+    text_to_send = text_to_send[1]
+
+    users = users_col.find({})
+    count = 0
+    for user in users:
         try:
-            if reply_msg:
-                if reply_msg.text:
-                    await client.send_message(user_id, reply_msg.text)
-                elif reply_msg.photo:
-                    await client.send_photo(user_id, photo=await reply_msg.download(), caption=reply_msg.caption)
-                elif reply_msg.video:
-                    await client.send_video(user_id, video=await reply_msg.download(), caption=reply_msg.caption)
-                elif reply_msg.document:
-                    await client.send_document(user_id, document=await reply_msg.download(), caption=reply_msg.caption)
-                elif reply_msg.audio:
-                    await client.send_audio(user_id, audio=await reply_msg.download(), caption=reply_msg.caption)
-            else:
-                text_to_send = message.text.split(None, 1)[1]
-                await client.send_message(user_id, text_to_send)
-            success += 1
-            await asyncio.sleep(0.5)
+            await client.send_message(user["user_id"], f"📢 Broadcast Message:\n\n{text_to_send}", protect_content=True)
+            count += 1
         except:
-            failed += 1
             continue
-    await msg_status.edit(f"✅ Broadcast completed!\nSuccess: {success}\nFailed: {failed}")
+    await message.reply_text(f"✅ Broadcast sent to {count} users!")
 
-# =================== Bot Start =========================
-print("🩸 MADARA FILE SHARE BOT - Full Updated Version Summoning...")
-print("✅ Bot is now running! Listening for messages...")
+# ---------------- RUN BOT ----------------
+print("🔥 Advanced File to Link Bot is running...")
 app.run()
