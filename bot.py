@@ -1,5 +1,5 @@
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from pymongo import MongoClient
 from config import *
 import datetime
@@ -32,7 +32,7 @@ async def is_subscribed(user_id: int) -> bool:
 async def start(client, message):
     args = message.text.split(maxsplit=1)
 
-    # If user clicks a file link
+    # File link handling
     if len(args) > 1 and args[1].startswith("file_"):
         file_id = int(args[1].replace("file_", ""))
         file_doc = files_col.find_one({"file_id": file_id, "status": "active"})
@@ -45,7 +45,6 @@ async def start(client, message):
                 )
                 return
 
-            # Copy the file instead of forwarding
             sent_msg = await app.copy_message(
                 chat_id=message.chat.id,
                 from_chat_id=file_doc["chat_id"],
@@ -59,7 +58,7 @@ async def start(client, message):
             await message.reply_text("❌ Sorry! This file is no longer available.")
             return
 
-    # Normal start (not a file link)
+    # Normal start
     users_col.update_one(
         {"user_id": message.from_user.id},
         {"$set": {
@@ -120,7 +119,7 @@ async def handle_file(client, message):
                 message.video.file_name if message.video else \
                 message.audio.file_name
 
-    # Copy the file to DB channel
+    # Copy file to DB channel
     fwd_msg = await app.copy_message(DATABASE_CHANNEL, message.chat.id, message.id)
 
     # Save file info
@@ -134,20 +133,40 @@ async def handle_file(client, message):
     }
     files_col.insert_one(file_record)
 
-    # Generate safe shareable link
-    file_link = f"https://t.me/Madara_FSBot?start=file_{fwd_msg.id}"
-
+    # Ask user to rename
     await message.reply_text(
-        f"✅ File saved!\n\n"
-        f"📂 **File Name:** `{file_name}`\n\n"
-        f"🔗 **Unique Shareable Link:**\n{file_link}\n\n"
-        f"⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes for security reasons.",
-        disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📥 Open File", url=file_link)]])
+        f"✅ File received!\n\nDo you want to **rename** this file before getting a shareable link?\n\n"
+        f"Original: `{file_name}`\n\nExample: `kgf.mp4` or `movie.mkv`",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Yes, rename ✏️", callback_data=f"rename_{fwd_msg.id}")],
+            [InlineKeyboardButton("No, give link 🔗", callback_data=f"link_{fwd_msg.id}")]
+        ]),
+        parse_mode="markdown"
     )
 
-    # Schedule auto-delete
-    asyncio.create_task(auto_delete_file(message.chat.id, fwd_msg.id, fwd_msg.id))
+# ---------------- RENAME CALLBACK ----------------
+@app.on_callback_query(filters.regex(r"rename_(\d+)"))
+async def rename_file_prompt(client, callback_query):
+    file_id = int(callback_query.data.split("_")[1])
+    await callback_query.message.edit_text(
+        f"✏️ Send me the new file name (with extension) for your file."
+    )
+    # Force reply
+    await app.listen(callback_query.from_user.id, filters.text, reply_to_message_id=callback_query.message.id, group=1)
+    
+# ---------------- LINK CALLBACK ----------------
+@app.on_callback_query(filters.regex(r"link_(\d+)"))
+async def send_shareable_link(client, callback_query):
+    file_id = int(callback_query.data.split("_")[1])
+    file_doc = files_col.find_one({"file_id": file_id})
+    if not file_doc:
+        await callback_query.message.edit_text("❌ File not found or deleted!")
+        return
+
+    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
+    await callback_query.message.edit_text(
+        f"🔗 Here is your shareable link:\n{file_link}"
+    )
 
 # ---------------- AUTO DELETE FUNCTION ----------------
 async def auto_delete_file(chat_id, msg_id, file_id):
