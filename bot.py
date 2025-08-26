@@ -45,11 +45,11 @@ async def start(client, message):
                 )
                 return
 
-            # Forward file using correct syntax
-            sent_msg = await client.forward_messages(
+            # Copy the file instead of forwarding
+            sent_msg = await app.copy_message(
                 chat_id=message.chat.id,
                 from_chat_id=file_doc["chat_id"],
-                message_ids=file_doc["file_id"]
+                message_id=file_doc["file_id"]
             )
 
             # Auto-delete after 10 minutes
@@ -120,8 +120,8 @@ async def handle_file(client, message):
                 message.video.file_name if message.video else \
                 message.audio.file_name
 
-    # Forward file to database channel
-    fwd_msg = await message.forward(DATABASE_CHANNEL)
+    # Copy the file to DB channel
+    fwd_msg = await app.copy_message(DATABASE_CHANNEL, message.chat.id, message.id)
 
     # Save file info
     file_record = {
@@ -141,7 +141,7 @@ async def handle_file(client, message):
         f"✅ File saved!\n\n"
         f"📂 **File Name:** `{file_name}`\n\n"
         f"🔗 **Unique Shareable Link:**\n{file_link}\n\n"
-        f"⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes due to copyright/security reasons.",
+        f"⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes for security reasons.",
         disable_web_page_preview=True,
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📥 Open File", url=file_link)]])
     )
