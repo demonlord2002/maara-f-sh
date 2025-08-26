@@ -30,7 +30,7 @@
     },
     "DB_CHANNEL_ID": {
       "description": "Telegram Channel ID for storing files (must be numeric, e.g., -1001234567890)",
-      "value": "-1002718440283",
+      "value": "madara_db_test",
       "required": true
     },
     "MONGO_URL": {
