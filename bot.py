@@ -34,26 +34,43 @@ async def is_subscribed(user_id: int) -> bool:
 def escape_markdown(text: str) -> str:
     return re.sub(r"([_*\[\]()~`>#+-=|{}.!])", r"\\\1", text)
 
+# ---------------- CANCEL FLAGS ----------------
+cancel_flags = {}  # user_id: True/False
+
 # ---------------- PROGRESS FUNCTION ----------------
-async def progress(current, total, message, prefix=""):
+async def progress(current, total, message, prefix="", user_id=None):
+    if user_id and cancel_flags.get(user_id):
+        raise asyncio.CancelledError()
     try:
         percent = current * 100 / total
-        await message.edit_text(f"{prefix} {percent:.1f}% ({current/1024:.1f}KB/{total/1024:.1f}KB)")
+        await message.edit_text(
+            f"{prefix} {percent:.1f}% ({current/1024:.1f}KB/{total/1024:.1f}KB)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_progress")]
+            ])
+        )
     except:
         pass
+
+# ---------------- CANCEL BUTTON CALLBACK ----------------
+@app.on_callback_query(filters.regex("cancel_progress"))
+async def cancel_progress_cb(client, callback_query):
+    cancel_flags[callback_query.from_user.id] = True
+    await callback_query.answer("⏹️ Operation cancelled!", show_alert=True)
 
 # ---------------- START COMMAND ----------------
 @app.on_message(filters.command("start"))
 async def start(client, message):
     args = message.text.split(maxsplit=1)
 
+    # If user opened via file link
     if len(args) > 1 and args[1].startswith("file_"):
         file_id = int(args[1].replace("file_", ""))
         file_doc = files_col.find_one({"file_id": file_id, "status": "active"})
         if file_doc:
             if not await is_subscribed(message.from_user.id):
                 await message.reply_text(
-                    f"🚨 To access this file, join our channel first!\n👉 {SUPPORT_LINK}",
+                    f"🚨 Join channel first!\n👉 {SUPPORT_LINK}",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
                 )
                 return
@@ -68,6 +85,7 @@ async def start(client, message):
             await message.reply_text("❌ File not available.")
             return
 
+    # Save/update user info
     users_col.update_one(
         {"user_id": message.from_user.id},
         {"$set": {
@@ -78,6 +96,7 @@ async def start(client, message):
         upsert=True
     )
 
+    # Subscription check
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
             f"🚨 Access Restricted! Join our channel first.",
@@ -90,7 +109,8 @@ async def start(client, message):
         return
 
     await message.reply_text(
-        f"👋 Hello {escape_markdown(message.from_user.first_name)}!\nSend me any file and I will create a safe shareable link.",
+        f"👋 Hello {escape_markdown(message.from_user.first_name)}!\n\n"
+        f"📂 Send me any file and I will create a secure shareable link for you.",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Owner", url=f"https://t.me/{OWNER_USERNAME}"),
              InlineKeyboardButton("Support Channel", url=SUPPORT_LINK)]
@@ -112,7 +132,7 @@ async def verify_subscription(client, callback_query):
 async def handle_file(client, message):
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
-            f"🚨 Join our channel to use this bot!\n👉 {SUPPORT_LINK}",
+            f"🚨 Join channel to use this bot!\n👉 {SUPPORT_LINK}",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
         )
         return
@@ -120,7 +140,6 @@ async def handle_file(client, message):
     file_name = message.document.file_name if message.document else \
                 message.video.file_name if message.video else \
                 message.audio.file_name
-
     safe_file_name = escape_markdown(file_name)
 
     fwd_msg = await app.copy_message(DATABASE_CHANNEL, message.chat.id, message.id)
@@ -136,7 +155,9 @@ async def handle_file(client, message):
     files_col.insert_one(file_record)
 
     await message.reply_text(
-        f"✅ File received!\n\nDo you want to **rename** before getting a shareable link?\n\nOriginal: `{safe_file_name}`",
+        f"✅ **File received!**\n\n"
+        f"💡 **Do you want to rename before getting a shareable link?**\n\n"
+        f"Original: `{safe_file_name}`",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Yes, rename ✏️", callback_data=f"rename_{fwd_msg.id}")],
             [InlineKeyboardButton("No, give link 🔗", callback_data=f"link_{fwd_msg.id}")]
@@ -157,6 +178,8 @@ async def rename_file_prompt(client, callback_query):
 # ---------------- HANDLE RENAME & RE-UPLOAD ----------------
 @app.on_message(filters.text)
 async def handle_rename(client, message):
+    cancel_flags[message.from_user.id] = False  # reset cancel flag
+
     user_doc = users_col.find_one({"user_id": message.from_user.id})
     if not user_doc or "renaming_file_id" not in user_doc:
         return
@@ -168,30 +191,44 @@ async def handle_rename(client, message):
         await message.reply_text("❌ Original file not found!")
         return
 
-    temp_file = await app.download_media(file_doc["chat_id"], file_doc["file_id"], file_name=new_name,
-                                         progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Downloading:")))
+    try:
+        orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
+        temp_file = await app.download_media(
+            message=orig_msg,
+            file_name=new_name,
+            progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Downloading:", message.from_user.id))
+        )
+    except asyncio.CancelledError:
+        await message.reply_text("❌ Download cancelled by user.")
+        return
 
-    # Re-upload to database channel
-    if temp_file.endswith((".mp4", ".mkv", ".mov")):
-        sent_msg = await app.send_video(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:")))
-    elif temp_file.endswith((".mp3", ".m4a", ".wav")):
-        sent_msg = await app.send_audio(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:")))
-    else:
-        sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:")))
+    try:
+        if temp_file.endswith((".mp4", ".mkv", ".mov")):
+            sent_msg = await app.send_video(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id)))
+        elif temp_file.endswith((".mp3", ".m4a", ".wav")):
+            sent_msg = await app.send_audio(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id)))
+        else:
+            sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id)))
+    except asyncio.CancelledError:
+        await message.reply_text("❌ Upload cancelled by user.")
+        os.remove(temp_file)
+        return
 
-    # Save new file record
     files_col.update_one({"file_id": file_id}, {"$set": {"file_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}})
-
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
     await message.reply_text(
-        f"✅ File saved!\n\n📂 File Name: {escape_markdown(new_name)}\n\n🔗 Unique Shareable Link:\n{file_link}",
+        f"✅ **File saved!**\n\n"
+        f"📂 File Name: - {escape_markdown(new_name)}\n\n"
+        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
+        f"⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes for security reasons.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Open File", url=file_link)]]),
         parse_mode=ParseMode.MARKDOWN
     )
 
     os.remove(temp_file)
     users_col.update_one({"user_id": message.from_user.id}, {"$unset": {"renaming_file_id": ""}})
+    cancel_flags[message.from_user.id] = False
 
 # ---------------- LINK CALLBACK ----------------
 @app.on_callback_query(filters.regex(r"link_(\d+)"))
@@ -206,14 +243,17 @@ async def send_shareable_link(client, callback_query):
     file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
 
     await callback_query.message.edit_text(
-        f"✅ File saved!\n\n📂 File Name: {escape_markdown(file_name)}\n\n🔗 Unique Shareable Link:\n{file_link}",
+        f"✅ **File saved!**\n\n"
+        f"📂 File Name: - {escape_markdown(file_name)}\n\n"
+        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
+        f"⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes for security reasons.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Open File", url=file_link)]]),
         parse_mode=ParseMode.MARKDOWN
     )
 
 # ---------------- AUTO DELETE ----------------
 async def auto_delete_file(chat_id, msg_id, file_id):
-    await asyncio.sleep(600)  # 10 minutes
+    await asyncio.sleep(600)
     try:
         await app.delete_messages(chat_id, [msg_id])
         files_col.update_one({"file_id": file_id}, {"$set": {"status": "deleted"}})
