@@ -15,7 +15,8 @@ class Config:
     OWNER_IDS = list(map(int, os.getenv("OWNER_IDS", "").split(",")))
 
     # ---------------- Database ----------------
-    DB_CHANNEL_ID = int(os.getenv("DB_CHANNEL_ID", "0"))  # Telegram channel ID where files are stored
+    # ---------------- Database ----------------
+    DB_CHANNEL_ID = os.getenv("DB_CHANNEL_ID", "madara_db_test")  # Can be channel username
     MONGO_URL = os.getenv("MONGO_URL", "")  # MongoDB URI
 
     # ---------------- Force Subscribe Channel ----------------
