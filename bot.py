@@ -36,7 +36,6 @@ async def start(client, message):
         file_id = int(args[1].replace("file_", ""))
         file_doc = files_col.find_one({"file_id": file_id, "status": "active"})
         if file_doc:
-            # Send the stored file
             await client.forward_messages(
                 message.chat.id,
                 chat_id=file_doc["chat_id"],
@@ -122,7 +121,7 @@ async def handle_file(client, message):
         "chat_id": fwd_msg.chat.id,
         "user_id": message.from_user.id,
         "file_name": file_name,
-        "timestamp": datetime.datetime.utcnow(),
+        "timestamp": datetime.datetime.now(datetime.UTC),  # ✅ fixed
         "status": "active"
     }
     files_col.insert_one(file_record)
