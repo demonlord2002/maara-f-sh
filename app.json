@@ -4,7 +4,6 @@
   "repository": "https://github.com/demonlord2002/maara-f-sh",
   "keywords": ["telegram", "file-bot", "pyrogram", "mongodb", "madara"],
   "buildpacks": [
-    { "url": "heroku-community/apt" },
     { "url": "heroku/python" }
   ],
   "env": {
