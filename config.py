@@ -11,7 +11,8 @@ DATABASE_CHANNEL = os.getenv("DATABASE_CHANNEL", "@madara_db_test")
 FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "@Fallen_Angels_Team")
 
 # OWNER_IDS supports multiple comma-separated IDs
-OWNER_IDS = [int(x.strip()) for x in os.getenv("OWNER_IDS", "7813285237").split(",") if x.strip()]
+
+OWNER_IDS = list(map(int, os.getenv("OWNER_IDS", "7813285237").split(",")))
 OWNER_USERNAME = os.getenv("OWNER_USERNAME", "SunsetOfMe")
 SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/Fallen_Angels_Team")
 
