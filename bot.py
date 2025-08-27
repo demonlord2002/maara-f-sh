@@ -24,7 +24,7 @@ app = Client(
 
 # ---------------- CANCEL FLAGS ----------------
 cancel_flags = {}  # user_id: True/False
-rename_timers = {}  # user_id: task
+rename_timers = {}  # user_id: asyncio.Task
 
 # ---------------- ESCAPE MARKDOWN ----------------
 def escape_markdown(text: str) -> str:
@@ -42,8 +42,6 @@ async def is_subscribed(user_id: int) -> bool:
 @app.on_message(filters.command("start"))
 async def start(client, message):
     args = message.text.split(maxsplit=1)
-
-    # If user opened via file link
     if len(args) > 1 and args[1].startswith("file_"):
         file_id = int(args[1].replace("file_", ""))
         file_doc = files_col.find_one({"file_id": file_id, "status": "active"})
@@ -64,7 +62,6 @@ async def start(client, message):
             await message.reply_text("❌ File not available.")
             return
 
-    # Save/update user info
     users_col.update_one(
         {"user_id": message.from_user.id},
         {"$set": {
@@ -75,7 +72,6 @@ async def start(client, message):
         upsert=True
     )
 
-    # Subscription check
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
             "🚨 Access Restricted! Join our channel first.",
@@ -177,26 +173,39 @@ async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
     users_col.update_one({"user_id": callback_query.from_user.id},{"$set": {"renaming_file_id": file_id}})
     
-    # Show waiting prompt with countdown
     prompt_msg = await callback_query.message.edit_text(
-        "✏️ Waiting for your **new file name**... ⌛\n"
-        "You have 5 minutes to reply with the new name."
+        "✏️ Waiting for your **new file name**... ⌛\nYou have 5 minutes to reply with the new name."
     )
-    
-    async def rename_timeout():
-        await asyncio.sleep(300)  # 5 minutes
-        user_doc = users_col.find_one({"user_id": callback_query.from_user.id})
-        if user_doc and "renaming_file_id" in user_doc:
-            users_col.update_one({"user_id": callback_query.from_user.id},{"$unset":{"renaming_file_id":""}})
+
+    async def live_countdown():
+        total_seconds = 300
+        bar_length = 10
+        while total_seconds > 0:
+            mins, secs = divmod(total_seconds, 60)
+            progress = int(bar_length * (300 - total_seconds) / 300)
+            bar = "▓" * progress + "░" * (bar_length - progress)
+            timer_text = f"✏️ Rename your file: ⌛ {bar} {mins:02d}:{secs:02d} left"
             try:
-                await prompt_msg.edit_text("❌ Rename request timed out. Please try again if needed.")
+                await prompt_msg.edit_text(timer_text)
             except:
                 pass
+            await asyncio.sleep(1)
+            total_seconds -= 1
+            user_doc = users_col.find_one({"user_id": callback_query.from_user.id})
+            if not user_doc or "renaming_file_id" not in user_doc:
+                return
 
-    # Start timeout task
+        # Time out
+        users_col.update_one({"user_id": callback_query.from_user.id},{"$unset":{"renaming_file_id":""}})
+        try:
+            await prompt_msg.edit_text("❌ Rename request timed out. Please try again if needed.")
+        except:
+            pass
+
     if callback_query.from_user.id in rename_timers:
         rename_timers[callback_query.from_user.id].cancel()
-    rename_timers[callback_query.from_user.id] = asyncio.create_task(rename_timeout())
+
+    rename_timers[callback_query.from_user.id] = asyncio.create_task(live_countdown())
 
 # ---------------- RENAME HANDLER ----------------
 async def perform_rename(user_id, new_name, message):
@@ -254,7 +263,6 @@ async def perform_rename(user_id, new_name, message):
     users_col.update_one({"user_id":user_id},{"$unset":{"renaming_file_id":""}})
     cancel_flags[user_id] = False
 
-    # Cancel any timeout task
     if user_id in rename_timers:
         rename_timers[user_id].cancel()
         del rename_timers[user_id]
@@ -276,5 +284,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot running with rename timer...")
+print("🔥 File Sharing Bot running with PROGRESS-BAR rename timer...")
 app.run()
