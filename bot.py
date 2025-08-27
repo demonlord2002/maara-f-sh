@@ -84,19 +84,42 @@ async def start(client, message):
                 await message.reply_text(
                     f"⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
                     f"🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗟𝗼𝗰𝗸𝗲𝗱, 𝗼𝗻𝗹𝘆 𝗠𝗲𝗺𝗯𝗲𝗿𝘀 𝗼𝗳 𝗠𝗮𝗱𝗮𝗿𝗮 𝗙𝗮𝗺𝗶𝗹𝘆 𝗰𝗮𝗻 𝘂𝘀𝗲 ❤️🥷",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]])
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]]
+                    )
                 )
                 return
-            await app.copy_message(
+
+            # ✅ Send file
+            sent_msg = await app.copy_message(
                 chat_id=message.chat.id,
                 from_chat_id=file_doc["chat_id"],
                 message_id=file_doc["file_id"]
             )
+
+            # ⚠️ Show Madara-style warning
+            warn_msg = await message.reply_text(
+                "⚠️ **Due to copyright ©️ issues this file will be auto-deleted in 10 minutes!**\n\n"
+                "💾 Save it to your **Saved Messages** immediately ⚡\n\n"
+                "👑 Madara protects his Family ❤️🥷"
+            )
+
+            # ⏳ Schedule auto-delete after 10 minutes
+            async def delete_later():
+                await asyncio.sleep(600)  # 600 sec = 10 min
+                try:
+                    await sent_msg.delete()
+                    await warn_msg.edit_text("❌ File deleted automatically due to copyright ©️ rules.")
+                except:
+                    pass
+
+            asyncio.create_task(delete_later())
             return
         else:
             await message.reply_text("❌ File not available.")
             return
 
+    # ✅ Save user in DB
     users_col.update_one(
         {"user_id": message.from_user.id},
         {"$set": {
@@ -107,6 +130,7 @@ async def start(client, message):
         upsert=True
     )
 
+    # ✅ Force subscribe check
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
             "⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
@@ -119,6 +143,7 @@ async def start(client, message):
         )
         return
 
+    # ✅ Default welcome message
     await message.reply_text(
         f"👑 𝗠𝗮𝗱𝗮𝗿𝗮 𝗪𝗲𝗹𝗰𝗼𝗺𝗲𝘀 𝗬𝗼𝘂 👑\n\n"
         f"✨ 𝗛𝗲𝗹𝗹𝗼 {escape_markdown(message.from_user.first_name)} ❤️\n\n"
@@ -129,6 +154,7 @@ async def start(client, message):
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
+
 
 # ---------------- VERIFY ----------------
 @app.on_callback_query(filters.regex("verify_sub"))
