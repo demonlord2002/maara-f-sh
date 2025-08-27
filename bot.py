@@ -8,6 +8,7 @@ import asyncio
 import re
 import os
 import time
+import traceback
 
 # ---------------- MONGO DB SETUP ----------------
 mongo = MongoClient(MONGO_URI)
@@ -321,11 +322,56 @@ async def rename_command(client, message):
         return
     await perform_rename(message.from_user.id, parts[1].strip(), message)
 
-@app.on_message(filters.text & ~filters.command(["start","rename","set_thumb","del_thumb"]))
+@app.on_message(filters.text & ~filters.command(["start","rename","set_thumb","del_thumb","broadcast"]))
 async def rename_text(client, message):
     user_doc = users_col.find_one({"user_id": message.from_user.id})
     if user_doc and "renaming_file_id" in user_doc:
         await perform_rename(message.from_user.id, message.text.strip(), message)
+
+# ---------------- BROADCAST ----------------
+@app.on_message(filters.command("broadcast") & filters.user(int(OWNER_ID)))
+async def broadcast_handler(client, message):
+    # Check if message is reply (media + caption) or text
+    if not message.reply_to_message and len(message.command) < 2:
+        await message.reply_text("⚠️ Usage:\nReply to a message with /broadcast\nOr use: /broadcast Your text")
+        return
+
+    # Get broadcast content
+    b_msg = message.reply_to_message if message.reply_to_message else message
+
+    sent, failed = 0, 0
+    users = users_col.find({})
+    total = users_col.count_documents({})
+    status = await message.reply_text(f"📢 Broadcasting started...\n👥 Total Users: {total}")
+
+    for user in users:
+        try:
+            uid = user["user_id"]
+            if b_msg.photo:
+                await app.send_photo(uid, b_msg.photo.file_id, caption=b_msg.caption or "")
+            elif b_msg.video:
+                await app.send_video(uid, b_msg.video.file_id, caption=b_msg.caption or "")
+            elif b_msg.document:
+                await app.send_document(uid, b_msg.document.file_id, caption=b_msg.caption or "")
+            elif b_msg.text and b_msg.text.startswith("/broadcast") is False:
+                await app.send_message(uid, b_msg.text)
+            elif message.command and len(message.command) > 1:
+                text = message.text.split(maxsplit=1)[1]
+                await app.send_message(uid, text)
+            else:
+                continue
+            sent += 1
+        except Exception as e:
+            failed += 1
+            # print(traceback.format_exc())
+            continue
+
+    await status.edit_text(
+        f"✅ Broadcast completed!\n\n"
+        f"👥 Total Users: {total}\n"
+        f"📩 Sent: {sent}\n"
+        f"⚠️ Failed: {failed}"
+    )
 
 # ---------------- RUN BOT ----------------
 print("🔥 Madara File Sharing Bot running safely on Heroku...")
