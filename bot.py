@@ -135,7 +135,8 @@ async def handle_file(client, message):
         f"Original: `{safe_file_name}`",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Yes, rename ✏️", callback_data=f"rename_{fwd_msg.id}")],
-            [InlineKeyboardButton("No, give link 🔗", callback_data=f"link_{fwd_msg.id}")]
+            [InlineKeyboardButton("No, give link 🔗", callback_data=f"link_{fwd_msg.id}")],
+            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -173,39 +174,16 @@ async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
     users_col.update_one({"user_id": callback_query.from_user.id},{"$set": {"renaming_file_id": file_id}})
     
-    prompt_msg = await callback_query.message.edit_text(
-        "✏️ Waiting for your **new file name**... ⌛\nYou have 5 minutes to reply with the new name."
+    await callback_query.message.edit_text(
+        f"✏️ Send me the new file name.\n\n"
+        f"You can reply with plain text or use the command:\n"
+        f"/rename [NewFileName]\n\n"
+        f"_Tip: If you omit the extension, I'll keep the original one._",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
+        ]),
+        parse_mode=ParseMode.MARKDOWN
     )
-
-    async def live_countdown():
-        total_seconds = 300
-        bar_length = 10
-        while total_seconds > 0:
-            mins, secs = divmod(total_seconds, 60)
-            progress = int(bar_length * (300 - total_seconds) / 300)
-            bar = "▓" * progress + "░" * (bar_length - progress)
-            timer_text = f"✏️ Rename your file: ⌛ {bar} {mins:02d}:{secs:02d} left"
-            try:
-                await prompt_msg.edit_text(timer_text)
-            except:
-                pass
-            await asyncio.sleep(1)
-            total_seconds -= 1
-            user_doc = users_col.find_one({"user_id": callback_query.from_user.id})
-            if not user_doc or "renaming_file_id" not in user_doc:
-                return
-
-        # Time out
-        users_col.update_one({"user_id": callback_query.from_user.id},{"$unset":{"renaming_file_id":""}})
-        try:
-            await prompt_msg.edit_text("❌ Rename request timed out. Please try again if needed.")
-        except:
-            pass
-
-    if callback_query.from_user.id in rename_timers:
-        rename_timers[callback_query.from_user.id].cancel()
-
-    rename_timers[callback_query.from_user.id] = asyncio.create_task(live_countdown())
 
 # ---------------- RENAME HANDLER ----------------
 async def perform_rename(user_id, new_name, message):
@@ -254,7 +232,8 @@ async def perform_rename(user_id, new_name, message):
 
     await message.reply_text(
         text,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)]]),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)],
+                                           [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
         parse_mode=ParseMode.MARKDOWN,
         disable_web_page_preview=True
     )
@@ -262,10 +241,6 @@ async def perform_rename(user_id, new_name, message):
     os.remove(temp_file)
     users_col.update_one({"user_id":user_id},{"$unset":{"renaming_file_id":""}})
     cancel_flags[user_id] = False
-
-    if user_id in rename_timers:
-        rename_timers[user_id].cancel()
-        del rename_timers[user_id]
 
 # ---------------- RENAME COMMAND ----------------
 @app.on_message(filters.command("rename"))
@@ -284,5 +259,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot running with PROGRESS-BAR rename timer...")
+print("🔥 File Sharing Bot running...")
 app.run()
