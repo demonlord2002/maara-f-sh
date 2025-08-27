@@ -7,6 +7,7 @@ import datetime
 import asyncio
 import re
 import os
+import time
 import math
 
 # ---------------- MONGO DB SETUP ----------------
@@ -182,7 +183,7 @@ async def rename_file_prompt(client, callback_query):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# ---------------- RENAME HANDLER WITH REAL PROGRESS ----------------
+# ---------------- RENAME HANDLER WITH SMOOTH LIVE PROGRESS ----------------
 async def perform_rename(user_id, new_name, message):
     user_doc = users_col.find_one({"user_id": user_id})
     if not user_doc or "renaming_file_id" not in user_doc:
@@ -216,40 +217,53 @@ async def perform_rename(user_id, new_name, message):
         parse_mode=ParseMode.MARKDOWN
     )
 
-    # ---------------- Download with progress ----------------
     temp_file = f"downloads/{new_name}"
-    downloaded = 0
+    start_time = time.time()
 
-    async for chunk in app.download_media(orig_msg, file_name=temp_file, progress=lambda d, t: None, progress_args=()):
-        downloaded = chunk
-        percent = min(int(downloaded / file_size * 100), 100)
+    def progress_bar(downloaded_bytes):
+        percent = min(downloaded_bytes / file_size * 100, 100)
         bar_len = 10
-        filled = math.floor(bar_len * percent / 100)
-        bar = "▓" * filled + "░" * (bar_len - filled)
-        mins, secs = divmod(int(file_size * percent / 100 / 50000), 60)  # rough ETA
+        filled_len = math.floor(bar_len * percent / 100)
+        bar = "▓" * filled_len + "░" * (bar_len - filled_len)
+        elapsed = time.time() - start_time
+        speed_mbps = (downloaded_bytes / 1024 / 1024) / max(elapsed, 0.001)
+        return bar, percent, speed_mbps
+
+    # ---------------- Download ----------------
+    async def download_progress(current, total):
+        bar, percent, speed = progress_bar(current)
         try:
             await progress_msg.edit_text(
-                f"✏️ Renaming your file: ⌛ {bar} {percent}% | ETA {mins:02d}:{secs:02d}",
+                f"⬇️ Downloading: {bar} {percent:.2f}% | {speed:.2f} MB/s",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]])
             )
         except:
             pass
 
-    # ---------------- Upload with progress ----------------
-    sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
+    downloaded_file = await app.download_media(orig_msg, file_name=temp_file, progress=download_progress, progress_args=())
+
+    # ---------------- Upload ----------------
+    start_upload = time.time()
+    async def upload_progress(current, total):
+        bar, percent, speed = progress_bar(current)
+        try:
+            await progress_msg.edit_text(
+                f"⬆️ Uploading:   {bar} {percent:.2f}% | {speed:.2f} MB/s",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]])
+            )
+        except:
+            pass
+
+    sent_msg = await app.send_document(DATABASE_CHANNEL, downloaded_file, file_name=new_name, progress=upload_progress, progress_args=())
+
     files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
-    text = (
+    await progress_msg.edit_text(
         f"✅ **File renamed & saved!**\n\n"
         f"📂 New Name: {escape_markdown(new_name)}\n\n"
         f"🔗 Unique Shareable Link:\n{file_link}\n\n"
-        f"⚠️ Note: This link is safe and temporary. "
-        "File will be removed automatically after 10 minutes for security & copyright reasons."
-    )
-
-    await progress_msg.edit_text(
-        text,
+        f"⚠️ This link is temporary. File removed after 10 mins.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)],
                                            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
         parse_mode=ParseMode.MARKDOWN,
@@ -276,5 +290,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot with REAL LIVE PROGRESS running...")
+print("🔥 File Sharing Bot with SMOOTH LIVE PROGRESS running...")
 app.run()
