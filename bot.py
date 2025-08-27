@@ -50,7 +50,6 @@ async def progress(current, total, message, prefix="", user_id=None):
             ])
         )
     except:
-        # message may be deleted or edited too frequently; ignore
         pass
 
 # ---------------- CANCEL BUTTON CALLBACK ----------------
@@ -71,7 +70,7 @@ async def start(client, message):
         if file_doc:
             if not await is_subscribed(message.from_user.id):
                 await message.reply_text(
-                    "🚨 Join channel first!\n👉 {}".format(SUPPORT_LINK),
+                    f"🚨 Join channel first!\n👉 {SUPPORT_LINK}",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
                 )
                 return
@@ -193,22 +192,17 @@ async def perform_rename_and_reupload(user_id: int, new_name: str, message):
         return
 
     file_id = user_doc["renaming_file_id"]
-
-    # Get original file info
     file_doc = files_col.find_one({"file_id": file_id})
     if not file_doc:
         await message.reply_text("❌ Original file not found!")
         return
 
-    # Normalize new name (auto-append original extension if user omitted)
     orig_ext = os.path.splitext(file_doc["file_name"])[1]
     if not new_name.endswith(orig_ext):
         new_name = f"{new_name}{orig_ext}"
 
-    # Ensure downloads folder exists
     os.makedirs("downloads", exist_ok=True)
 
-    # Download original
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         temp_file = await app.download_media(
@@ -228,7 +222,6 @@ async def perform_rename_and_reupload(user_id: int, new_name: str, message):
         await message.reply_text(f"❌ Download error: `{str(e)}`", parse_mode=ParseMode.MARKDOWN)
         return
 
-    # Re-upload with new name
     try:
         if temp_file.endswith((".mp4", ".mkv", ".mov")):
             sent_msg = await app.send_video(
@@ -262,7 +255,6 @@ async def perform_rename_and_reupload(user_id: int, new_name: str, message):
             os.remove(temp_file)
         return
 
-    # Update DB
     files_col.update_one(
         {"file_id": file_id},
         {"$set": {
@@ -295,23 +287,17 @@ async def perform_rename_and_reupload(user_id: int, new_name: str, message):
 # ---------------- /rename COMMAND ----------------
 @app.on_message(filters.command("rename"))
 async def rename_command(client, message):
-    # Get everything after /rename (handles spaces & punctuation)
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         example = "www.1TamilMV.blue - Kingdom (2025) Tamil HQ HDRip - x264 - AAC - 400MB - ESub.mkv"
-        await message.reply_text(
-            f"Usage:\n`/rename {example}`",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        await message.reply_text(f"Usage:\n`/rename {example}`", parse_mode=ParseMode.MARKDOWN)
         return
-
     new_name = parts[1].strip()
     await perform_rename_and_reupload(message.from_user.id, new_name, message)
 
-# ---------------- PLAIN TEXT RENAME (still supported) ----------------
+# ---------------- PLAIN TEXT RENAME ----------------
 @app.on_message(filters.text & ~filters.command(["start", "rename"]))
 async def handle_rename_text(client, message):
-    # Only act if user previously tapped "Yes, rename"
     user_doc = users_col.find_one({"user_id": message.from_user.id})
     if not user_doc or "renaming_file_id" not in user_doc:
         return
@@ -326,10 +312,8 @@ async def send_shareable_link(client, callback_query):
     if not file_doc:
         await callback_query.message.edit_text("❌ File not found!")
         return
-
     file_name = file_doc["file_name"]
     file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
-
     await callback_query.message.edit_text(
         f"✅ **File saved!**\n\n"
         f"📂 File Name: - {escape_markdown(file_name)}\n\n"
