@@ -3,21 +3,11 @@ import re
 import time
 import datetime
 import asyncio
-from pymongo import MongoClient
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
-
-# ---------------- ENVIRONMENT / CONFIG ----------------
-API_ID = int(os.getenv("API_ID", "123456"))
-API_HASH = os.getenv("API_HASH", "your_api_hash")
-BOT_TOKEN = os.getenv("BOT_TOKEN", "your_bot_token")
-BOT_USERNAME = os.getenv("BOT_USERNAME", "Madara_FSBot")
-OWNER_USERNAME = os.getenv("OWNER_USERNAME", "YourUsername")
-FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "@YourChannel")
-SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/YourChannel")
-DATABASE_CHANNEL = int(os.getenv("DATABASE_CHANNEL", "-1001234567890"))  # Telegram channel ID to store files
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017")
+from pymongo import MongoClient
+from config import *
 
 # ---------------- MONGO DB ----------------
 mongo = MongoClient(MONGO_URI)
@@ -306,5 +296,6 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
+BOT_USERNAME = os.getenv("BOT_USERNAME", "Madara_FSBot")
 print("🔥 Madara_FSBot running...")
 app.run()
