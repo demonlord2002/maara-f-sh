@@ -37,27 +37,6 @@ async def is_subscribed(user_id: int) -> bool:
     except:
         return False
 
-# ---------------- PROGRESS ----------------
-async def progress(current, total, message, prefix="", user_id=None):
-    if user_id and cancel_flags.get(user_id):
-        raise asyncio.CancelledError()
-    try:
-        percent = current * 100 / total
-        await message.edit_text(
-            f"{prefix} {percent:.1f}% ({current/1024:.1f}KB/{total/1024:.1f}KB)",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_progress")]
-            ])
-        )
-    except:
-        pass
-
-# ---------------- CANCEL BUTTON ----------------
-@app.on_callback_query(filters.regex("cancel_progress"))
-async def cancel_progress_cb(client, callback_query):
-    cancel_flags[callback_query.from_user.id] = True
-    await callback_query.answer("⏹️ Operation cancelled!", show_alert=True)
-
 # ---------------- START COMMAND ----------------
 @app.on_message(filters.command("start"))
 async def start(client, message):
@@ -74,12 +53,11 @@ async def start(client, message):
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
                 )
                 return
-            sent_msg = await app.copy_message(
+            await app.copy_message(
                 chat_id=message.chat.id,
                 from_chat_id=file_doc["chat_id"],
                 message_id=file_doc["file_id"]
             )
-            asyncio.create_task(auto_delete_file(message.chat.id, sent_msg.id, file_id))
             return
         else:
             await message.reply_text("❌ File not available.")
@@ -165,7 +143,34 @@ async def handle_file(client, message):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# ---------------- RENAME & LINK CALLBACKS ----------------
+# ---------------- LINK CALLBACK ----------------
+@app.on_callback_query(filters.regex(r"link_(\d+)"))
+async def send_shareable_link(client, callback_query):
+    file_id = int(callback_query.data.split("_")[1])
+    file_doc = files_col.find_one({"file_id": file_id})
+    if not file_doc:
+        await callback_query.message.edit_text("❌ File not found!")
+        return
+
+    file_name = escape_markdown(file_doc["file_name"])
+    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
+
+    text = (
+        f"✅ **File saved!**\n\n"
+        f"📂 File Name: {file_name}\n\n"
+        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
+        f"⚠️ Note: This link is safe and temporary. "
+        "File will be removed automatically after 10 minutes for security & copyright reasons."
+    )
+
+    await callback_query.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)]]),
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True
+    )
+
+# ---------------- RENAME CALLBACK ----------------
 @app.on_callback_query(filters.regex(r"rename_(\d+)"))
 async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
@@ -175,16 +180,6 @@ async def rename_file_prompt(client, callback_query):
         f"✏️ Send me the **new file name**.\nYou can reply with text or use:\n`{example}`",
         parse_mode=ParseMode.MARKDOWN
     )
-
-@app.on_callback_query(filters.regex(r"link_(\d+)"))
-async def send_shareable_link(client, callback_query):
-    file_id = int(callback_query.data.split("_")[1])
-    file_doc = files_col.find_one({"file_id": file_id})
-    if not file_doc:
-        await callback_query.message.edit_text("❌ File not found!")
-        return
-    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
-    await callback_query.message.edit_text(f"🔗 Shareable Link: {file_link}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open File", url=file_link)]]))
 
 # ---------------- RENAME HANDLER ----------------
 async def perform_rename(user_id, new_name, message):
@@ -212,7 +207,7 @@ async def perform_rename(user_id, new_name, message):
         await message.reply_text(f"❌ Download error: {str(e)}")
         return
 
-    # Upload
+    # Upload renamed file
     try:
         sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
     except Exception as e:
@@ -222,12 +217,27 @@ async def perform_rename(user_id, new_name, message):
 
     files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
-    await message.reply_text(f"✅ File renamed & saved!\nLink: {file_link}")
+
+    text = (
+        f"✅ **File renamed & saved!**\n\n"
+        f"📂 New Name: {escape_markdown(new_name)}\n\n"
+        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
+        f"⚠️ Note: This link is safe and temporary. "
+        "File will be removed automatically after 10 minutes for security & copyright reasons."
+    )
+
+    await message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)]]),
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True
+    )
+
     os.remove(temp_file)
     users_col.update_one({"user_id":user_id},{"$unset":{"renaming_file_id":""}})
     cancel_flags[user_id] = False
 
-# ---------------- COMMANDS ----------------
+# ---------------- RENAME COMMAND ----------------
 @app.on_message(filters.command("rename"))
 async def rename_command(client, message):
     parts = message.text.split(maxsplit=1)
@@ -236,21 +246,12 @@ async def rename_command(client, message):
         return
     await perform_rename(message.from_user.id, parts[1].strip(), message)
 
-@app.on_message(filters.text & ~filters.command(["start", "rename"]))
+@app.on_message(filters.text & ~filters.command(["start","rename"]))
 async def rename_text(client, message):
     user_doc = users_col.find_one({"user_id": message.from_user.id})
     if not user_doc or "renaming_file_id" not in user_doc:
         return
     await perform_rename(message.from_user.id, message.text.strip(), message)
-
-# ---------------- AUTO DELETE ----------------
-async def auto_delete_file(chat_id, msg_id, file_id):
-    await asyncio.sleep(600)
-    try:
-        await app.delete_messages(chat_id, [msg_id])
-        files_col.update_one({"file_id":file_id},{"$set":{"status":"deleted"}})
-    except:
-        pass
 
 # ---------------- RUN BOT ----------------
 print("🔥 File Sharing Bot running...")
