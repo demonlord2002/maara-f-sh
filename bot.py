@@ -1,5 +1,5 @@
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from pyrogram.enums import ParseMode
 from pymongo import MongoClient
 from config import *
@@ -8,6 +8,9 @@ import asyncio
 import re
 import os
 import time
+import shlex
+import subprocess
+import imageio_ffmpeg as ffmpeg
 
 # ---------------- MONGO DB SETUP ----------------
 mongo = MongoClient(MONGO_URI)
@@ -169,11 +172,112 @@ async def handle_file(client, message):
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Yes, rename ✏️", callback_data=f"rename_{fwd_msg.id}")],
             [InlineKeyboardButton("No, give link 🔗", callback_data=f"link_{fwd_msg.id}")],
+            [InlineKeyboardButton("Sample video 📷", callback_data=f"sample_{fwd_msg.id}")],
             [InlineKeyboardButton("📢 Support Channel", url=SUPPORT_LINK)]
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
 
+# ---------------- SAMPLE BUTTON ----------------
+@app.on_callback_query(filters.regex(r"sample_(\d+)"))
+async def sample_info(client, callback_query):
+    file_id = int(callback_query.data.split("_")[1])
+    file_doc = files_col.find_one({"file_id": file_id})
+    if not file_doc:
+        return await callback_query.message.edit_text("❌ File not found!")
+
+    await callback_query.message.edit_text(
+        f"📹 To get a sample of this video, reply with the command:\n\n"
+        f"`/sample HH:MM:SS to HH:MM:SS`\n\n"
+        f"⏱ Duration must be 1–60 seconds.\n\n"
+        f"📢 Support: {SUPPORT_LINK}",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📢 Support Channel", url=SUPPORT_LINK)]
+        ]),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+# ---------------- SAMPLE COMMAND ----------------
+ffmpeg_path = ffmpeg.get_ffmpeg_exe()
+
+@app.on_message(filters.command("sample"))
+async def sample_trim(client, message: Message):
+    # Check if message is a reply to a video/document
+    if not message.reply_to_message or not (
+        message.reply_to_message.video or message.reply_to_message.document
+    ):
+        return await message.reply("⚠️ Please reply to a video file with:\n/sample HH:MM:SS to HH:MM:SS")
+
+    # Parse command times
+    match = re.search(r"(\d{2}):(\d{2}):(\d{2})\s+to\s+(\d{2}):(\d{2}):(\d{2})", message.text)
+    if not match:
+        return await message.reply("❌ Invalid format. Use:\n/sample 00:10:00 to 00:10:30")
+
+    h1, m1, s1, h2, m2, s2 = map(int, match.groups())
+
+    # Validate seconds & minutes
+    for val in [m1, s1, m2, s2]:
+        if val >= 60:
+            return await message.reply("⚠️ Minutes and seconds must be less than 60!")
+
+    start_sec = h1*3600 + m1*60 + s1
+    end_sec = h2*3600 + m2*60 + s2
+    duration = end_sec - start_sec
+
+    if duration <= 0 or duration > 60:
+        return await message.reply("⚠️ Duration must be between 1–60 seconds.")
+
+    msg = await message.reply("📥 Downloading video...")
+
+    try:
+        input_path = await message.reply_to_message.download()
+    except Exception:
+        return await msg.edit("❌ Download failed. File not saved properly.")
+
+    output_path = f"/tmp/sample_clip_{message.from_user.id}.mp4"
+    await msg.edit("✂️ Trimming sample video...")
+
+    # FFmpeg command using imageio-ffmpeg executable
+    ffmpeg_cmd = [
+        ffmpeg_path,
+        "-i", input_path,
+        "-ss", str(start_sec),
+        "-t", str(duration),
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-y",
+        output_path
+    ]
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+    except Exception as e:
+        os.remove(input_path)
+        return await msg.edit(f"❌ FFmpeg execution failed:\n{e}")
+
+    # Check output validity
+    if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+        os.remove(input_path)
+        return await msg.edit(f"❌ Failed to generate sample. FFmpeg error:\n{stderr.decode()}")
+
+    await msg.edit("📤 Uploading sample...")
+
+    await client.send_video(
+        chat_id=message.chat.id,
+        video=output_path,
+        caption=f"✂️ Sample clip from {h1:02}:{m1:02}:{s1:02} to {h2:02}:{m2:02}:{s2:02}"
+    )
+
+    # Cleanup
+    os.remove(input_path)
+    os.remove(output_path)
+    await msg.delete()
+    
 # ---------------- LINK CALLBACK ----------------
 @app.on_callback_query(filters.regex(r"link_(\d+)"))
 async def send_shareable_link(client, callback_query):
