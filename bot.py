@@ -232,9 +232,12 @@ async def perform_rename(user_id, new_name, message):
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         start_time = time.time()
 
-        # Proper download progress
+        # ✅ Thread-safe progress
         def download_progress(cur, tot):
-            asyncio.get_running_loop().create_task(progress_bar(cur, tot, start_time, message, prefix="⏬ Downloading..."))
+            asyncio.run_coroutine_threadsafe(
+                progress_bar(cur, tot, start_time, message, prefix="⏬ Downloading..."),
+                loop=asyncio.get_event_loop()
+            )
 
         temp_file = await app.download_media(orig_msg, file_name=f"downloads/{new_name}", progress=download_progress)
     except Exception as e:
@@ -244,9 +247,11 @@ async def perform_rename(user_id, new_name, message):
     try:
         start_time = time.time()
 
-        # Proper upload progress
         def upload_progress(cur, tot):
-            asyncio.get_running_loop().create_task(progress_bar(cur, tot, start_time, message, prefix="⏫ Uploading..."))
+            asyncio.run_coroutine_threadsafe(
+                progress_bar(cur, tot, start_time, message, prefix="⏫ Uploading..."),
+                loop=asyncio.get_event_loop()
+            )
 
         sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name, progress=upload_progress)
     except Exception as e:
