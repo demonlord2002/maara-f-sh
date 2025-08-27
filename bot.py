@@ -7,7 +7,6 @@ import datetime
 import asyncio
 import re
 import os
-import time
 
 # ---------------- MONGO DB SETUP ----------------
 mongo = MongoClient(MONGO_URI)
@@ -39,19 +38,19 @@ async def is_subscribed(user_id: int) -> bool:
 def sanitize_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "_", name)
 
-# ---------------- PROGRESS BAR ----------------
-def progress_bar(current, total, width=20):
-    done = int(width * current / total) if total else 0
-    remaining = width - done
-    percent = (current / total * 100) if total else 0
-    return f"[{'▓'*done}{'░'*remaining}] {percent:.2f}%"
-
-async def progress_for_pyrogram(current, total, message, prefix=""):
-    text = f"{prefix} {progress_bar(current, total)}"
-    try:
-        await message.edit_text(text)
-    except:
-        pass
+# ---------------- PROGRESS CALLBACK ----------------
+def progress_callback(status_message, prefix=""):
+    def callback(current, total):
+        try:
+            width = 20
+            done = int(width * current / total) if total else 0
+            remaining = width - done
+            percent = (current / total * 100) if total else 0
+            text = f"{prefix} [{'▓'*done}{'░'*remaining}] {percent:.2f}%"
+            asyncio.run_coroutine_threadsafe(status_message.edit_text(text), app.loop)
+        except:
+            pass
+    return callback
 
 # ---------------- START COMMAND ----------------
 @app.on_message(filters.command("start"))
@@ -214,7 +213,7 @@ async def perform_rename(user_id, new_name, message):
         temp_file = await app.download_media(
             orig_msg,
             file_name=f"/tmp/downloads/{new_name}",
-            progress=lambda c, t: asyncio.create_task(progress_for_pyrogram(c, t, status_msg, prefix="📥 Downloading:"))
+            progress=progress_callback(status_msg, prefix="📥 Downloading:")
         )
 
         if not temp_file:
@@ -226,7 +225,7 @@ async def perform_rename(user_id, new_name, message):
             DATABASE_CHANNEL,
             temp_file,
             file_name=new_name,
-            progress=lambda c, t: asyncio.create_task(progress_for_pyrogram(c, t, status_msg, prefix="📤 Uploading:"))
+            progress=progress_callback(status_msg, prefix="📤 Uploading:")
         )
 
     except Exception as e:
@@ -265,5 +264,5 @@ async def rename_text(client, message):
         await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot running with live progress bars...")
+print("🔥 Madara File Sharing Bot running...")
 app.run()
