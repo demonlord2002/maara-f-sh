@@ -186,6 +186,12 @@ async def handle_rename(client, message):
 
     file_id = user_doc["renaming_file_id"]
     new_name = message.text.strip()
+
+    # Ensure extension exists
+    if "." not in new_name:
+        await message.reply_text("❌ Please include file extension. Example: `myvideo.mp4`", parse_mode=ParseMode.MARKDOWN)
+        return
+
     file_doc = files_col.find_one({"file_id": file_id})
     if not file_doc:
         await message.reply_text("❌ Original file not found!")
@@ -195,7 +201,7 @@ async def handle_rename(client, message):
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         temp_file = await app.download_media(
             message=orig_msg,
-            file_name=new_name,
+            file_name=f"downloads/{new_name}",  # save properly
             progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Downloading:", message.from_user.id))
         )
     except asyncio.CancelledError:
@@ -204,29 +210,52 @@ async def handle_rename(client, message):
 
     try:
         if temp_file.endswith((".mp4", ".mkv", ".mov")):
-            sent_msg = await app.send_video(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id)))
+            sent_msg = await app.send_video(
+                DATABASE_CHANNEL, temp_file, file_name=new_name,
+                progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id))
+            )
         elif temp_file.endswith((".mp3", ".m4a", ".wav")):
-            sent_msg = await app.send_audio(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id)))
+            sent_msg = await app.send_audio(
+                DATABASE_CHANNEL, temp_file, file_name=new_name,
+                progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id))
+            )
         else:
-            sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id)))
+            sent_msg = await app.send_document(
+                DATABASE_CHANNEL, temp_file, file_name=new_name,
+                progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id))
+            )
     except asyncio.CancelledError:
         await message.reply_text("❌ Upload cancelled by user.")
         os.remove(temp_file)
         return
 
-    files_col.update_one({"file_id": file_id}, {"$set": {"file_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}})
+    # Update DB
+    files_col.update_one(
+        {"file_id": file_id},
+        {"$set": {
+            "file_id": sent_msg.id,
+            "chat_id": DATABASE_CHANNEL,
+            "file_name": new_name,
+            "status": "active"
+        }}
+    )
+
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
     await message.reply_text(
-        f"✅ **File saved!**\n\n"
-        f"📂 File Name: - {escape_markdown(new_name)}\n\n"
-        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
-        f"⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes for security reasons.",
+        f"✅ **File renamed & saved!**\n\n"
+        f"📂 New Name: `{escape_markdown(new_name)}`\n\n"
+        f"🔗 Link: {file_link}\n\n"
+        f"⚠️ This file auto-deletes after 10 minutes.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Open File", url=file_link)]]),
         parse_mode=ParseMode.MARKDOWN
     )
 
-    os.remove(temp_file)
+    try:
+        os.remove(temp_file)
+    except:
+        pass
+
     users_col.update_one({"user_id": message.from_user.id}, {"$unset": {"renaming_file_id": ""}})
     cancel_flags[message.from_user.id] = False
 
