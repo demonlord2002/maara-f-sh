@@ -155,8 +155,7 @@ async def send_shareable_link(client, callback_query):
         f"✅ **File saved!**\n\n"
         f"📂 File Name: {file_name}\n\n"
         f"🔗 Unique Shareable Link:\n{file_link}\n\n"
-        f"⚠️ Note: This link is safe and temporary. "
-        "File will be removed automatically after 10 minutes for security & copyright reasons."
+        f"⚠️ Note: This link is safe and temporary."
     )
 
     await callback_query.message.edit_text(
@@ -166,24 +165,7 @@ async def send_shareable_link(client, callback_query):
         disable_web_page_preview=True
     )
 
-# ---------------- RENAME CALLBACK ----------------
-@app.on_callback_query(filters.regex(r"rename_(\d+)"))
-async def rename_file_prompt(client, callback_query):
-    file_id = int(callback_query.data.split("_")[1])
-    users_col.update_one({"user_id": callback_query.from_user.id},{"$set": {"renaming_file_id": file_id}})
-    
-    await callback_query.message.edit_text(
-        f"✏️ Send me the new file name.\n\n"
-        f"You can reply with plain text or use the command:\n"
-        f"/rename [NewFileName]\n\n"
-        f"_Tip: If you omit the extension, I'll keep the original one._",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
-        ]),
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-# ---------------- RENAME HANDLER WITH SMOOTH LIVE PROGRESS ----------------
+# ---------------- RENAME HANDLER (DOWNLOAD PROGRESS ONLY) ----------------
 async def perform_rename(user_id, new_name, message):
     user_doc = users_col.find_one({"user_id": user_id})
     if not user_doc or "renaming_file_id" not in user_doc:
@@ -212,7 +194,7 @@ async def perform_rename(user_id, new_name, message):
                 orig_msg.audio.file_size
 
     progress_msg = await message.reply_text(
-        f"✏️ Renaming your file: ⌛ Starting download...",
+        f"✏️ Renaming your file: ⌛ Downloading...",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -220,54 +202,31 @@ async def perform_rename(user_id, new_name, message):
     temp_file = f"downloads/{new_name}"
     start_time = time.time()
 
-    def progress_bar(downloaded_bytes):
-        percent = min(downloaded_bytes / file_size * 100, 100)
-        bar_len = 10
-        filled_len = math.floor(bar_len * percent / 100)
-        bar = "▓" * filled_len + "░" * (bar_len - filled_len)
-        elapsed = time.time() - start_time
-        speed_mbps = (downloaded_bytes / 1024 / 1024) / max(elapsed, 0.001)
-        return bar, percent, speed_mbps
-
-    # ---------------- Download ----------------
+    # ---------------- Download with progress ----------------
     async def download_progress(current, total):
-        bar, percent, speed = progress_bar(current)
+        percent = current * 100 / total
+        bar_len = 10
+        filled = math.floor(bar_len * percent / 100)
+        bar = "▓" * filled + "░" * (bar_len - filled)
+        elapsed = time.time() - start_time
+        speed = current / 1024 / 1024 / max(elapsed, 0.001)
         try:
-            await progress_msg.edit_text(
-                f"⬇️ Downloading: {bar} {percent:.2f}% | {speed:.2f} MB/s",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]])
-            )
+            await progress_msg.edit_text(f"⬇️ Downloading: {bar} {percent:.2f}% | {speed:.2f} MB/s")
         except:
             pass
 
-    downloaded_file = await app.download_media(orig_msg, file_name=temp_file, progress=download_progress, progress_args=())
+    await app.download_media(orig_msg, file_name=temp_file, progress=download_progress, progress_args=())
 
-    # ---------------- Upload ----------------
-    start_upload = time.time()
-    async def upload_progress(current, total):
-        bar, percent, speed = progress_bar(current)
-        try:
-            await progress_msg.edit_text(
-                f"⬆️ Uploading:   {bar} {percent:.2f}% | {speed:.2f} MB/s",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]])
-            )
-        except:
-            pass
-
-    sent_msg = await app.send_document(DATABASE_CHANNEL, downloaded_file, file_name=new_name, progress=upload_progress, progress_args=())
+    # ---------------- Upload WITHOUT progress (Heroku-safe) ----------------
+    sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
 
     files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
     await progress_msg.edit_text(
-        f"✅ **File renamed & saved!**\n\n"
-        f"📂 New Name: {escape_markdown(new_name)}\n\n"
-        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
-        f"⚠️ This link is temporary. File removed after 10 mins.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)],
-                                           [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
-        parse_mode=ParseMode.MARKDOWN,
-        disable_web_page_preview=True
+        f"✅ **File renamed & saved!**\n\n📂 New Name: {escape_markdown(new_name)}\n\n🔗 Link: {file_link}",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)]]),
+        parse_mode=ParseMode.MARKDOWN
     )
 
     os.remove(temp_file)
@@ -290,5 +249,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot with SMOOTH LIVE PROGRESS running...")
+print("🔥 File Sharing Bot running on Heroku-safe mode...")
 app.run()
