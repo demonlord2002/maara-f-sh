@@ -3,7 +3,6 @@ import re
 import time
 import datetime
 import asyncio
-import io
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
@@ -228,6 +227,10 @@ async def perform_rename(user_id, new_name, message):
     if not new_name.endswith(orig_ext):
         new_name += orig_ext
 
+    temp_dir = "/tmp"
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_file_path = os.path.join(temp_dir, new_name)
+
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         start_time = time.time()
@@ -238,7 +241,8 @@ async def perform_rename(user_id, new_name, message):
                 loop=asyncio.get_event_loop()
             )
 
-        temp_file = await app.download_media(orig_msg, file_name=new_name, progress=download_progress)
+        # Download to Heroku-safe /tmp
+        await app.download_media(orig_msg, file_name=temp_file_path, progress=download_progress)
 
         start_time = time.time()
         def upload_progress(cur, tot):
@@ -247,16 +251,12 @@ async def perform_rename(user_id, new_name, message):
                 loop=asyncio.get_event_loop()
             )
 
-        # ✅ Use BytesIO for safe upload on Heroku
-        with open(temp_file, "rb") as f:
-            file_bytes = io.BytesIO(f.read())
-            file_bytes.name = new_name
-            sent_msg = await app.send_document(DATABASE_CHANNEL, file_bytes, file_name=new_name, progress=upload_progress)
+        sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file_path, file_name=new_name, progress=upload_progress)
 
     except Exception as e:
         await message.reply_text(f"❌ Error: {str(e)}")
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
         return
 
     files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
@@ -268,8 +268,8 @@ async def perform_rename(user_id, new_name, message):
         parse_mode=ParseMode.MARKDOWN
     )
 
-    if os.path.exists(temp_file):
-        os.remove(temp_file)
+    if os.path.exists(temp_file_path):
+        os.remove(temp_file_path)
     users_col.update_one({"user_id":user_id},{"$unset":{"renaming_file_id":""}})
     cancel_flags[user_id] = False
 
