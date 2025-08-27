@@ -22,6 +22,13 @@ app = Client(
     bot_token=BOT_TOKEN
 )
 
+# ---------------- CANCEL FLAGS ----------------
+cancel_flags = {}  # user_id: True/False
+
+# ---------------- ESCAPE MARKDOWN ----------------
+def escape_markdown(text: str) -> str:
+    return re.sub(r"([_*\[\]()~`>#+-=|{}.!])", r"\\\1", text)
+
 # ---------------- FORCE SUBSCRIBE CHECK ----------------
 async def is_subscribed(user_id: int) -> bool:
     try:
@@ -30,14 +37,7 @@ async def is_subscribed(user_id: int) -> bool:
     except:
         return False
 
-# Escape markdown special characters
-def escape_markdown(text: str) -> str:
-    return re.sub(r"([_*\[\]()~`>#+-=|{}.!])", r"\\\1", text)
-
-# ---------------- CANCEL FLAGS ----------------
-cancel_flags = {}  # user_id: True/False
-
-# ---------------- PROGRESS FUNCTION ----------------
+# ---------------- PROGRESS ----------------
 async def progress(current, total, message, prefix="", user_id=None):
     if user_id and cancel_flags.get(user_id):
         raise asyncio.CancelledError()
@@ -52,7 +52,7 @@ async def progress(current, total, message, prefix="", user_id=None):
     except:
         pass
 
-# ---------------- CANCEL BUTTON CALLBACK ----------------
+# ---------------- CANCEL BUTTON ----------------
 @app.on_callback_query(filters.regex("cancel_progress"))
 async def cancel_progress_cb(client, callback_query):
     cancel_flags[callback_query.from_user.id] = True
@@ -165,30 +165,33 @@ async def handle_file(client, message):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# ---------------- RENAME CALLBACK ----------------
+# ---------------- RENAME & LINK CALLBACKS ----------------
 @app.on_callback_query(filters.regex(r"rename_(\d+)"))
 async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
-    users_col.update_one(
-        {"user_id": callback_query.from_user.id},
-        {"$set": {"renaming_file_id": file_id}}
-    )
-    example = "www.1TamilMV.blue - Kingdom (2025) Tamil HQ HDRip - x264 - AAC - 400MB - ESub.mkv"
+    users_col.update_one({"user_id": callback_query.from_user.id},{"$set": {"renaming_file_id": file_id}})
+    example = "Example: /rename My Movie 2025"
     await callback_query.message.edit_text(
-        "✏️ Send me the **new file name**.\n\n"
-        "You can reply with plain text **or** use the command:\n"
-        f"`/rename {example}`\n\n"
-        "_Tip: If you omit the extension, I'll keep the original one._",
+        f"✏️ Send me the **new file name**.\nYou can reply with text or use:\n`{example}`",
         parse_mode=ParseMode.MARKDOWN
     )
 
-# ---------------- INTERNAL: DO RENAME ----------------
-async def perform_rename_and_reupload(user_id: int, new_name: str, message):
-    cancel_flags[user_id] = False  # reset cancel flag
+@app.on_callback_query(filters.regex(r"link_(\d+)"))
+async def send_shareable_link(client, callback_query):
+    file_id = int(callback_query.data.split("_")[1])
+    file_doc = files_col.find_one({"file_id": file_id})
+    if not file_doc:
+        await callback_query.message.edit_text("❌ File not found!")
+        return
+    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
+    await callback_query.message.edit_text(f"🔗 Shareable Link: {file_link}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Open File", url=file_link)]]))
 
+# ---------------- RENAME HANDLER ----------------
+async def perform_rename(user_id, new_name, message):
+    cancel_flags[user_id] = False
     user_doc = users_col.find_one({"user_id": user_id})
     if not user_doc or "renaming_file_id" not in user_doc:
-        await message.reply_text("⚠️ First send a file and tap **Yes, rename ✏️**.", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text("⚠️ First send a file and tap rename.")
         return
 
     file_id = user_doc["renaming_file_id"]
@@ -199,137 +202,53 @@ async def perform_rename_and_reupload(user_id: int, new_name: str, message):
 
     orig_ext = os.path.splitext(file_doc["file_name"])[1]
     if not new_name.endswith(orig_ext):
-        new_name = f"{new_name}{orig_ext}"
+        new_name += orig_ext
 
     os.makedirs("downloads", exist_ok=True)
-
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
-        temp_file = await app.download_media(
-            message=orig_msg,
-            file_name=f"downloads/{new_name}",
-            progress=lambda c, t: asyncio.get_event_loop().create_task(
-                progress(c, t, message, "Downloading:", user_id)
-            )
-        )
-        if not temp_file or not os.path.exists(temp_file):
-            await message.reply_text("❌ Download failed. Please try again.")
-            return
-    except asyncio.CancelledError:
-        await message.reply_text("❌ Download cancelled by user.")
-        return
+        temp_file = await app.download_media(orig_msg, file_name=f"downloads/{new_name}")
     except Exception as e:
-        await message.reply_text(f"❌ Download error: `{str(e)}`", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text(f"❌ Download error: {str(e)}")
         return
 
+    # Upload
     try:
-        if temp_file.endswith((".mp4", ".mkv", ".mov")):
-            sent_msg = await app.send_video(
-                DATABASE_CHANNEL, temp_file, file_name=new_name,
-                progress=lambda c, t: asyncio.get_event_loop().create_task(
-                    progress(c, t, message, "Uploading:", user_id)
-                )
-            )
-        elif temp_file.endswith((".mp3", ".m4a", ".wav")):
-            sent_msg = await app.send_audio(
-                DATABASE_CHANNEL, temp_file, file_name=new_name,
-                progress=lambda c, t: asyncio.get_event_loop().create_task(
-                    progress(c, t, message, "Uploading:", user_id)
-                )
-            )
-        else:
-            sent_msg = await app.send_document(
-                DATABASE_CHANNEL, temp_file, file_name=new_name,
-                progress=lambda c, t: asyncio.get_event_loop().create_task(
-                    progress(c, t, message, "Uploading:", user_id)
-                )
-            )
-    except asyncio.CancelledError:
-        await message.reply_text("❌ Upload cancelled by user.")
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        return
+        sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
     except Exception as e:
-        await message.reply_text(f"❌ Upload failed: `{str(e)}`", parse_mode=ParseMode.MARKDOWN)
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        return
-
-    files_col.update_one(
-        {"file_id": file_id},
-        {"$set": {
-            "file_id": sent_msg.id,
-            "chat_id": DATABASE_CHANNEL,
-            "file_name": new_name,
-            "status": "active"
-        }}
-    )
-
-    file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
-
-    await message.reply_text(
-        f"✅ **File renamed & saved!**\n\n"
-        f"📂 New Name: `{escape_markdown(new_name)}`\n\n"
-        f"🔗 Link: {file_link}\n\n"
-        f"⚠️ This file auto-deletes after 10 minutes.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Open File", url=file_link)]]),
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-    try:
+        await message.reply_text(f"❌ Upload error: {str(e)}")
         os.remove(temp_file)
-    except:
-        pass
+        return
 
-    users_col.update_one({"user_id": user_id}, {"$unset": {"renaming_file_id": ""}})
+    files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
+    file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
+    await message.reply_text(f"✅ File renamed & saved!\nLink: {file_link}")
+    os.remove(temp_file)
+    users_col.update_one({"user_id":user_id},{"$unset":{"renaming_file_id":""}})
     cancel_flags[user_id] = False
 
-# ---------------- /rename COMMAND ----------------
+# ---------------- COMMANDS ----------------
 @app.on_message(filters.command("rename"))
 async def rename_command(client, message):
     parts = message.text.split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():
-        example = "www.1TamilMV.blue - Kingdom (2025) Tamil HQ HDRip - x264 - AAC - 400MB - ESub.mkv"
-        await message.reply_text(f"Usage:\n`/rename {example}`", parse_mode=ParseMode.MARKDOWN)
+    if len(parts) < 2: 
+        await message.reply_text("Usage: /rename NewFileName")
         return
-    new_name = parts[1].strip()
-    await perform_rename_and_reupload(message.from_user.id, new_name, message)
+    await perform_rename(message.from_user.id, parts[1].strip(), message)
 
-# ---------------- PLAIN TEXT RENAME ----------------
 @app.on_message(filters.text & ~filters.command(["start", "rename"]))
-async def handle_rename_text(client, message):
+async def rename_text(client, message):
     user_doc = users_col.find_one({"user_id": message.from_user.id})
     if not user_doc or "renaming_file_id" not in user_doc:
         return
-    new_name = message.text.strip()
-    await perform_rename_and_reupload(message.from_user.id, new_name, message)
-
-# ---------------- LINK CALLBACK ----------------
-@app.on_callback_query(filters.regex(r"link_(\d+)"))
-async def send_shareable_link(client, callback_query):
-    file_id = int(callback_query.data.split("_")[1])
-    file_doc = files_col.find_one({"file_id": file_id})
-    if not file_doc:
-        await callback_query.message.edit_text("❌ File not found!")
-        return
-    file_name = file_doc["file_name"]
-    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
-    await callback_query.message.edit_text(
-        f"✅ **File saved!**\n\n"
-        f"📂 File Name: - {escape_markdown(file_name)}\n\n"
-        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
-        f"⚠️ Note: This link is temporary. File will be automatically removed after 10 minutes for security reasons.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Open File", url=file_link)]]),
-        parse_mode=ParseMode.MARKDOWN
-    )
+    await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- AUTO DELETE ----------------
 async def auto_delete_file(chat_id, msg_id, file_id):
     await asyncio.sleep(600)
     try:
         await app.delete_messages(chat_id, [msg_id])
-        files_col.update_one({"file_id": file_id}, {"$set": {"status": "deleted"}})
-        await app.send_message(chat_id, "⚠️ File auto-removed after 10 minutes for security.")
+        files_col.update_one({"file_id":file_id},{"$set":{"status":"deleted"}})
     except:
         pass
 
