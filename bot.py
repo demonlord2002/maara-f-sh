@@ -195,8 +195,8 @@ async def handle_file(client, message):
     await message.reply_text(
         f"✅ **File received!**\n\n"
         f"💡 **Do you want to rename before getting a shareable link?**\n\n"
-        f"🖼️ Use /set_thumb to set a custom thumbnail\n"
-        f"❌ Use /del_thumb to delete your thumbnail"
+        f"🖼️ **Use /set_thumb to set a custom thumbnail**\n"
+        f"❌ **Use /del_thumb to delete your thumbnail**\n\n"
         f"Original: `{safe_file_name}`",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Yes, rename ✏️", callback_data=f"rename_{fwd_msg.id}")],
