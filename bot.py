@@ -329,15 +329,16 @@ async def rename_text(client, message):
         await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- BROADCAST ----------------
-@app.on_message(filters.command("broadcast") & filters.user(int(OWNER_IDS)))
+@app.on_message(filters.command("broadcast") & filters.user(OWNER_IDS))
 async def broadcast_handler(client, message):
-    # Check if message is reply (media + caption) or text
-    if not message.reply_to_message and len(message.command) < 2:
+    # Determine broadcast content
+    if message.reply_to_message:
+        b_msg = message.reply_to_message
+    elif len(message.command) > 1:
+        b_msg = message.text.split(maxsplit=1)[1]
+    else:
         await message.reply_text("⚠️ Usage:\nReply to a message with /broadcast\nOr use: /broadcast Your text")
         return
-
-    # Get broadcast content
-    b_msg = message.reply_to_message if message.reply_to_message else message
 
     sent, failed = 0, 0
     users = users_col.find({})
@@ -347,23 +348,25 @@ async def broadcast_handler(client, message):
     for user in users:
         try:
             uid = user["user_id"]
-            if b_msg.photo:
+
+            # Media broadcast
+            if hasattr(b_msg, "photo") and b_msg.photo:
                 await app.send_photo(uid, b_msg.photo.file_id, caption=b_msg.caption or "")
-            elif b_msg.video:
+            elif hasattr(b_msg, "video") and b_msg.video:
                 await app.send_video(uid, b_msg.video.file_id, caption=b_msg.caption or "")
-            elif b_msg.document:
+            elif hasattr(b_msg, "document") and b_msg.document:
                 await app.send_document(uid, b_msg.document.file_id, caption=b_msg.caption or "")
-            elif b_msg.text and b_msg.text.startswith("/broadcast") is False:
-                await app.send_message(uid, b_msg.text)
-            elif message.command and len(message.command) > 1:
-                text = message.text.split(maxsplit=1)[1]
-                await app.send_message(uid, text)
+            # Text broadcast
+            elif isinstance(b_msg, str):
+                await app.send_message(uid, b_msg)
             else:
                 continue
+
             sent += 1
-        except Exception as e:
+            await asyncio.sleep(0.2)  # small delay to avoid FloodWait
+
+        except Exception:
             failed += 1
-            # print(traceback.format_exc())
             continue
 
     await status.edit_text(
@@ -372,6 +375,7 @@ async def broadcast_handler(client, message):
         f"📩 Sent: {sent}\n"
         f"⚠️ Failed: {failed}"
     )
+
 
 # ---------------- RUN BOT ----------------
 print("🔥 Madara File Sharing Bot running safely on Heroku...")
