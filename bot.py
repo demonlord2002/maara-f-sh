@@ -23,7 +23,6 @@ app = Client(
 )
 
 # ---------------- CANCEL FLAGS ----------------
-cancel_flags = {}  # user_id: True/False
 rename_timers = {}  # user_id: asyncio.Task
 
 # ---------------- ESCAPE MARKDOWN ----------------
@@ -185,9 +184,8 @@ async def rename_file_prompt(client, callback_query):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# ---------------- RENAME HANDLER ----------------
+# ---------------- RENAME HANDLER WITH PROGRESS BAR ----------------
 async def perform_rename(user_id, new_name, message):
-    cancel_flags[user_id] = False
     user_doc = users_col.find_one({"user_id": user_id})
     if not user_doc or "renaming_file_id" not in user_doc:
         await message.reply_text("⚠️ First send a file and tap rename.")
@@ -203,19 +201,42 @@ async def perform_rename(user_id, new_name, message):
     if not new_name.endswith(orig_ext):
         new_name += orig_ext
 
+    # Countdown message with progress bar
+    progress_msg = await message.reply_text(
+        f"✏️ Renaming your file: ⌛ ░░░░░░░░ 05:00 left",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    total_seconds = 300
+    bar_length = 10
+    while total_seconds > 0:
+        mins, secs = divmod(total_seconds, 60)
+        progress = int(bar_length * (300 - total_seconds) / 300)
+        bar = "▓" * progress + "░" * (bar_length - progress)
+        try:
+            await progress_msg.edit_text(
+                f"✏️ Renaming your file: ⌛ {bar} {mins:02d}:{secs:02d} left",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]])
+            )
+        except:
+            pass
+        await asyncio.sleep(1)
+        total_seconds -= 1
+
+    # After countdown, download & upload renamed file
     os.makedirs("downloads", exist_ok=True)
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         temp_file = await app.download_media(orig_msg, file_name=f"downloads/{new_name}")
     except Exception as e:
-        await message.reply_text(f"❌ Download error: {str(e)}")
+        await progress_msg.edit_text(f"❌ Download error: {str(e)}")
         return
 
-    # Upload renamed file
     try:
         sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
     except Exception as e:
-        await message.reply_text(f"❌ Upload error: {str(e)}")
+        await progress_msg.edit_text(f"❌ Upload error: {str(e)}")
         os.remove(temp_file)
         return
 
@@ -230,7 +251,7 @@ async def perform_rename(user_id, new_name, message):
         "File will be removed automatically after 10 minutes for security & copyright reasons."
     )
 
-    await message.reply_text(
+    await progress_msg.edit_text(
         text,
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)],
                                            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
@@ -240,13 +261,12 @@ async def perform_rename(user_id, new_name, message):
 
     os.remove(temp_file)
     users_col.update_one({"user_id":user_id},{"$unset":{"renaming_file_id":""}})
-    cancel_flags[user_id] = False
 
 # ---------------- RENAME COMMAND ----------------
 @app.on_message(filters.command("rename"))
 async def rename_command(client, message):
     parts = message.text.split(maxsplit=1)
-    if len(parts) < 2: 
+    if len(parts) < 2:
         await message.reply_text("Usage: /rename NewFileName")
         return
     await perform_rename(message.from_user.id, parts[1].strip(), message)
@@ -259,5 +279,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot running...")
+print("🔥 File Sharing Bot with LIVE PROGRESS-BAR running...")
 app.run()
