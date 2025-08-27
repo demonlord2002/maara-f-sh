@@ -7,6 +7,7 @@ import datetime
 import asyncio
 import re
 import os
+import time
 
 # ---------------- MONGO DB SETUP ----------------
 mongo = MongoClient(MONGO_URI)
@@ -38,18 +39,33 @@ async def is_subscribed(user_id: int) -> bool:
 def sanitize_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "_", name)
 
-# ---------------- PROGRESS CALLBACK ----------------
+# ---------------- SAFE PROGRESS CALLBACK ----------------
 def progress_callback(status_message, prefix=""):
+    last_update = 0
+    lock = asyncio.Lock()
+
     def callback(current, total):
-        try:
-            width = 20
-            done = int(width * current / total) if total else 0
-            remaining = width - done
-            percent = (current / total * 100) if total else 0
-            text = f"{prefix} [{'▓'*done}{'░'*remaining}] {percent:.2f}%"
-            asyncio.run_coroutine_threadsafe(status_message.edit_text(text), app.loop)
-        except:
-            pass
+        nonlocal last_update
+        now = time.time()
+        if now - last_update < 3:  # update every 3 seconds
+            return
+        last_update = now
+
+        done = int(20 * current / total) if total else 0
+        remaining = 20 - done
+        percent = (current / total * 100) if total else 0
+        text = f"{prefix} [{'▓'*done}{'░'*remaining}] {percent:.2f}%"
+
+        # thread-safe edit
+        async def edit():
+            async with lock:
+                try:
+                    await status_message.edit_text(text)
+                except:
+                    pass
+
+        asyncio.run_coroutine_threadsafe(edit(), app.loop)
+
     return callback
 
 # ---------------- START COMMAND ----------------
@@ -264,5 +280,5 @@ async def rename_text(client, message):
         await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 Madara File Sharing Bot running...")
+print("🔥 Madara File Sharing Bot running safely on Heroku...")
 app.run()
