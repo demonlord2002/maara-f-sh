@@ -206,6 +206,43 @@ async def rename_file_prompt(client, callback_query):
         parse_mode=ParseMode.MARKDOWN
     )
 
+# ---------------- SET THUMB ----------------
+@app.on_message(filters.command("set_thumb") & filters.reply)
+async def set_thumb(client, message):
+    if not message.reply_to_message.photo:
+        await message.reply_text("⚠️ Reply to an image with /set_thumb to save thumbnail.")
+        return
+
+    photo = message.reply_to_message.photo
+    file_path = await app.download_media(photo, file_name=f"/tmp/thumb_{message.from_user.id}.jpg")
+
+    users_col.update_one(
+        {"user_id": message.from_user.id},
+        {"$set": {"thumbnail": file_path}},
+        upsert=True
+    )
+
+    await message.reply_text("✅ Successfully saved your thumbnail ❤️")
+
+# ---------------- DELETE THUMB ----------------
+@app.on_message(filters.command("del_thumb"))
+async def del_thumb(client, message):
+    user_doc = users_col.find_one({"user_id": message.from_user.id})
+    if not user_doc or "thumbnail" not in user_doc:
+        await message.reply_text("⚠️ You don’t have any thumbnail saved.")
+        return
+
+    # remove from DB
+    users_col.update_one({"user_id": message.from_user.id}, {"$unset": {"thumbnail": ""}})
+    # also remove local file
+    try:
+        if os.path.exists(user_doc["thumbnail"]):
+            os.remove(user_doc["thumbnail"])
+    except:
+        pass
+
+    await message.reply_text("✅ Thumbnail deleted successfully ❌")
+
 # ---------------- PERFORM RENAME ----------------
 async def perform_rename(user_id, new_name, message):
     user_doc = users_col.find_one({"user_id": user_id})
@@ -241,10 +278,14 @@ async def perform_rename(user_id, new_name, message):
             return
 
         await status_msg.edit_text("📤 Uploading file...")
+
+        # attach thumbnail if exists
+        thumb_path = user_doc.get("thumbnail")
         sent_msg = await app.send_document(
             DATABASE_CHANNEL,
             temp_file,
             file_name=new_name,
+            thumb=thumb_path if thumb_path else None,
             progress=progress_callback(status_msg, prefix="📤 Uploading:")
         )
 
@@ -252,7 +293,10 @@ async def perform_rename(user_id, new_name, message):
         await status_msg.edit_text(f"❌ Error: {str(e)}")
         return
 
-    files_col.update_one({"file_id": file_id}, {"$set": {"file_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}})
+    files_col.update_one(
+        {"file_id": file_id},
+        {"$set": {"file_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}}
+    )
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
     await status_msg.edit_text(
@@ -277,7 +321,7 @@ async def rename_command(client, message):
         return
     await perform_rename(message.from_user.id, parts[1].strip(), message)
 
-@app.on_message(filters.text & ~filters.command(["start","rename"]))
+@app.on_message(filters.text & ~filters.command(["start","rename","set_thumb","del_thumb"]))
 async def rename_text(client, message):
     user_doc = users_col.find_one({"user_id": message.from_user.id})
     if user_doc and "renaming_file_id" in user_doc:
