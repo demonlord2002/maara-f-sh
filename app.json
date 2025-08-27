@@ -4,7 +4,7 @@
   "repository": "https://github.com/demonlord2002/maara-f-sh",
   "keywords": ["telegram", "file-bot", "pyrogram", "mongodb", "madara"],
   "buildpacks": [
-    { "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git" },
+    { "url": "heroku-community/apt" },
     { "url": "heroku/python" }
   ],
   "env": {
