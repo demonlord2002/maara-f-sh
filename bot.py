@@ -78,8 +78,9 @@ async def start(client, message):
         if file_doc:
             if not await is_subscribed(message.from_user.id):
                 await message.reply_text(
-                    f"🚨 Join channel first!\n👉 {SUPPORT_LINK}",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
+                    f"⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
+                    f"🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗟𝗼𝗰𝗸𝗲𝗱, 𝗼𝗻𝗹𝘆 𝗠𝗲𝗺𝗯𝗲𝗿𝘀 𝗼𝗳 𝗠𝗮𝗱𝗮𝗿𝗮 𝗙𝗮𝗺𝗶𝗹𝘆 𝗰𝗮𝗻 𝘂𝘀𝗲 ❤️🥷",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]])
                 )
                 return
             await app.copy_message(
@@ -104,21 +105,23 @@ async def start(client, message):
 
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
-            "🚨 Access Restricted! Join our channel first.",
+            "⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
+            "🔒 𝗬𝗼𝘂𝗿 𝗮𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗟𝗼𝗰𝗸𝗲𝗱, 𝗝𝗼𝗶𝗻 𝗳𝗶𝗿𝘀𝘁 𝘁𝗼 𝘂𝗻𝗹𝗼𝗰𝗸 ❤️🥷",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)],
-                [InlineKeyboardButton("✅ Verify Joined", callback_data="verify_sub")]
+                [InlineKeyboardButton("🚪 Join Channel", url=SUPPORT_LINK)],
+                [InlineKeyboardButton("✅ Verify Now", callback_data="verify_sub")]
             ]),
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
     await message.reply_text(
-        f"👋 Hello {escape_markdown(message.from_user.first_name)}!\n\n"
-        f"📂 Send me any file and I will create a secure shareable link for you.",
+        f"👑 𝗠𝗮𝗱𝗮𝗿𝗮 𝗪𝗲𝗹𝗰𝗼𝗺𝗲𝘀 𝗬𝗼𝘂 👑\n\n"
+        f"✨ 𝗛𝗲𝗹𝗹𝗼 {escape_markdown(message.from_user.first_name)} ❤️\n\n"
+        f"📂 𝗦𝗲𝗻𝗱 𝗺𝗲 𝗮𝗻𝘆 𝗳𝗶𝗹𝗲 & 𝗜’𝗹𝗹 𝗰𝗿𝗲𝗮𝘁𝗲 𝗮 𝘀𝗵𝗮𝗿𝗲𝗮𝗯𝗹𝗲 𝗹𝗶𝗻𝗸 𝗳𝗼𝗿 𝘆𝗼𝘂 ⚡",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Owner", url=f"https://t.me/{OWNER_USERNAME}"),
-             InlineKeyboardButton("Support Channel", url=SUPPORT_LINK)]
+            [InlineKeyboardButton("👑 Owner", url=f"https://t.me/{OWNER_USERNAME}"),
+             InlineKeyboardButton("📢 Support", url=SUPPORT_LINK)]
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -128,17 +131,18 @@ async def start(client, message):
 async def verify_subscription(client, callback_query):
     user_id = callback_query.from_user.id
     if await is_subscribed(user_id):
-        await callback_query.message.edit_text("✅ Verification successful! You can now send files.")
+        await callback_query.message.edit_text("✅ Verified! Welcome to Madara Family ❤️")
     else:
-        await callback_query.answer("❌ Not subscribed yet!", show_alert=True)
+        await callback_query.answer("❌ Not subscribed yet! Join first ⚡", show_alert=True)
 
 # ---------------- FILE HANDLER ----------------
 @app.on_message(filters.document | filters.video | filters.audio)
 async def handle_file(client, message):
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
-            f"🚨 Join channel to use this bot!\n👉 {SUPPORT_LINK}",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
+            f"⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
+            f"🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗟𝗼𝗰𝗸𝗲𝗱, 𝗼𝗻𝗹𝘆 𝗠𝗲𝗺𝗯𝗲𝗿𝘀 𝗼𝗳 𝗠𝗮𝗱𝗮𝗿𝗮 𝗙𝗮𝗺𝗶𝗹𝘆 𝗰𝗮𝗻 𝘂𝘀𝗲 ❤️🥷",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]])
         )
         return
 
@@ -165,7 +169,7 @@ async def handle_file(client, message):
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("Yes, rename ✏️", callback_data=f"rename_{fwd_msg.id}")],
             [InlineKeyboardButton("No, give link 🔗", callback_data=f"link_{fwd_msg.id}")],
-            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
+            [InlineKeyboardButton("📢 Support Channel", url=SUPPORT_LINK)]
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -198,7 +202,7 @@ async def rename_file_prompt(client, callback_query):
     await callback_query.message.edit_text(
         f"✏️ Send me the new file name.\n\nUse plain text or /rename [NewFileName].\n"
         f"_Tip: If you omit the extension, I keep the original._",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📢 Support Channel", url=SUPPORT_LINK)]]),
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -255,7 +259,7 @@ async def perform_rename(user_id, new_name, message):
         f"✅ **File renamed & saved!**\n\n📂 {escape_markdown(new_name)}\n\n🔗 Shareable Link:\n{file_link}",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🗃️ Open File", url=file_link)],
-            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
+            [InlineKeyboardButton("📢 Support Channel", url=SUPPORT_LINK)]
         ]),
         parse_mode=ParseMode.MARKDOWN,
         disable_web_page_preview=True
