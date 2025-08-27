@@ -173,7 +173,7 @@ async def rename_file_prompt(client, callback_query):
         {"user_id": callback_query.from_user.id},
         {"$set": {"renaming_file_id": file_id}}
     )
-    await callback_query.message.edit_text("✏️ Send me the new file name (with extension) for your file.")
+    await callback_query.message.edit_text("✏️ Send me the new file name (without extension if you want me to auto-add).")
 
 # ---------------- HANDLE RENAME & RE-UPLOAD ----------------
 @app.on_message(filters.text)
@@ -193,9 +193,13 @@ async def handle_rename(client, message):
         await message.reply_text("❌ Original file not found!")
         return
 
-    orig_ext = os.path.splitext(file_doc["file_name"])[1]  # original extension
-    if not new_name.endswith(orig_ext):  # auto-append ext if missing
+    # Auto append original extension if missing
+    orig_ext = os.path.splitext(file_doc["file_name"])[1]
+    if not new_name.endswith(orig_ext):
         new_name = f"{new_name}{orig_ext}"
+
+    # Ensure downloads folder exists
+    os.makedirs("downloads", exist_ok=True)
 
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
@@ -206,6 +210,12 @@ async def handle_rename(client, message):
                 progress(c, t, message, "Downloading:", message.from_user.id)
             )
         )
+
+        # Fix: Handle failed download
+        if not temp_file or not os.path.exists(temp_file):
+            await message.reply_text("❌ Download failed. Please try again.")
+            return
+
     except asyncio.CancelledError:
         await message.reply_text("❌ Download cancelled by user.")
         return
@@ -232,9 +242,10 @@ async def handle_rename(client, message):
                     progress(c, t, message, "Uploading:", message.from_user.id)
                 )
             )
-    except asyncio.CancelledError:
-        await message.reply_text("❌ Upload cancelled by user.")
-        os.remove(temp_file)
+    except Exception as e:
+        await message.reply_text(f"❌ Upload failed: `{str(e)}`", parse_mode=ParseMode.MARKDOWN)
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
         return
 
     # Update DB
