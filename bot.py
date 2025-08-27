@@ -187,22 +187,24 @@ async def handle_rename(client, message):
     file_id = user_doc["renaming_file_id"]
     new_name = message.text.strip()
 
-    # Ensure extension exists
-    if "." not in new_name:
-        await message.reply_text("❌ Please include file extension. Example: `myvideo.mp4`", parse_mode=ParseMode.MARKDOWN)
-        return
-
+    # Get original file info
     file_doc = files_col.find_one({"file_id": file_id})
     if not file_doc:
         await message.reply_text("❌ Original file not found!")
         return
 
+    orig_ext = os.path.splitext(file_doc["file_name"])[1]  # original extension
+    if not new_name.endswith(orig_ext):  # auto-append ext if missing
+        new_name = f"{new_name}{orig_ext}"
+
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         temp_file = await app.download_media(
             message=orig_msg,
-            file_name=f"downloads/{new_name}",  # save properly
-            progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Downloading:", message.from_user.id))
+            file_name=f"downloads/{new_name}",
+            progress=lambda c, t: asyncio.get_event_loop().create_task(
+                progress(c, t, message, "Downloading:", message.from_user.id)
+            )
         )
     except asyncio.CancelledError:
         await message.reply_text("❌ Download cancelled by user.")
@@ -212,17 +214,23 @@ async def handle_rename(client, message):
         if temp_file.endswith((".mp4", ".mkv", ".mov")):
             sent_msg = await app.send_video(
                 DATABASE_CHANNEL, temp_file, file_name=new_name,
-                progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id))
+                progress=lambda c, t: asyncio.get_event_loop().create_task(
+                    progress(c, t, message, "Uploading:", message.from_user.id)
+                )
             )
         elif temp_file.endswith((".mp3", ".m4a", ".wav")):
             sent_msg = await app.send_audio(
                 DATABASE_CHANNEL, temp_file, file_name=new_name,
-                progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id))
+                progress=lambda c, t: asyncio.get_event_loop().create_task(
+                    progress(c, t, message, "Uploading:", message.from_user.id)
+                )
             )
         else:
             sent_msg = await app.send_document(
                 DATABASE_CHANNEL, temp_file, file_name=new_name,
-                progress=lambda c, t: asyncio.create_task(progress(c, t, message, "Uploading:", message.from_user.id))
+                progress=lambda c, t: asyncio.get_event_loop().create_task(
+                    progress(c, t, message, "Uploading:", message.from_user.id)
+                )
             )
     except asyncio.CancelledError:
         await message.reply_text("❌ Upload cancelled by user.")
