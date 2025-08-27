@@ -7,6 +7,7 @@ import datetime
 import asyncio
 import re
 import os
+import math
 
 # ---------------- MONGO DB SETUP ----------------
 mongo = MongoClient(MONGO_URI)
@@ -21,9 +22,6 @@ app = Client(
     api_hash=API_HASH,
     bot_token=BOT_TOKEN
 )
-
-# ---------------- CANCEL FLAGS ----------------
-rename_timers = {}  # user_id: asyncio.Task
 
 # ---------------- ESCAPE MARKDOWN ----------------
 def escape_markdown(text: str) -> str:
@@ -184,7 +182,7 @@ async def rename_file_prompt(client, callback_query):
         parse_mode=ParseMode.MARKDOWN
     )
 
-# ---------------- RENAME HANDLER WITH PROGRESS BAR ----------------
+# ---------------- RENAME HANDLER WITH REAL PROGRESS ----------------
 async def perform_rename(user_id, new_name, message):
     user_doc = users_col.find_one({"user_id": user_id})
     if not user_doc or "renaming_file_id" not in user_doc:
@@ -201,45 +199,44 @@ async def perform_rename(user_id, new_name, message):
     if not new_name.endswith(orig_ext):
         new_name += orig_ext
 
-    # Countdown message with progress bar
+    os.makedirs("downloads", exist_ok=True)
+    try:
+        orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
+    except Exception as e:
+        await message.reply_text(f"❌ Error fetching original file: {str(e)}")
+        return
+
+    file_size = orig_msg.document.file_size if orig_msg.document else \
+                orig_msg.video.file_size if orig_msg.video else \
+                orig_msg.audio.file_size
+
     progress_msg = await message.reply_text(
-        f"✏️ Renaming your file: ⌛ ░░░░░░░░ 05:00 left",
+        f"✏️ Renaming your file: ⌛ Starting download...",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
         parse_mode=ParseMode.MARKDOWN
     )
 
-    total_seconds = 300
-    bar_length = 10
-    while total_seconds > 0:
-        mins, secs = divmod(total_seconds, 60)
-        progress = int(bar_length * (300 - total_seconds) / 300)
-        bar = "▓" * progress + "░" * (bar_length - progress)
+    # ---------------- Download with progress ----------------
+    temp_file = f"downloads/{new_name}"
+    downloaded = 0
+
+    async for chunk in app.download_media(orig_msg, file_name=temp_file, progress=lambda d, t: None, progress_args=()):
+        downloaded = chunk
+        percent = min(int(downloaded / file_size * 100), 100)
+        bar_len = 10
+        filled = math.floor(bar_len * percent / 100)
+        bar = "▓" * filled + "░" * (bar_len - filled)
+        mins, secs = divmod(int(file_size * percent / 100 / 50000), 60)  # rough ETA
         try:
             await progress_msg.edit_text(
-                f"✏️ Renaming your file: ⌛ {bar} {mins:02d}:{secs:02d} left",
+                f"✏️ Renaming your file: ⌛ {bar} {percent}% | ETA {mins:02d}:{secs:02d}",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]])
             )
         except:
             pass
-        await asyncio.sleep(1)
-        total_seconds -= 1
 
-    # After countdown, download & upload renamed file
-    os.makedirs("downloads", exist_ok=True)
-    try:
-        orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
-        temp_file = await app.download_media(orig_msg, file_name=f"downloads/{new_name}")
-    except Exception as e:
-        await progress_msg.edit_text(f"❌ Download error: {str(e)}")
-        return
-
-    try:
-        sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
-    except Exception as e:
-        await progress_msg.edit_text(f"❌ Upload error: {str(e)}")
-        os.remove(temp_file)
-        return
-
+    # ---------------- Upload with progress ----------------
+    sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
     files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
@@ -279,5 +276,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot with LIVE PROGRESS-BAR running...")
+print("🔥 File Sharing Bot with REAL LIVE PROGRESS running...")
 app.run()
