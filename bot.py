@@ -149,7 +149,7 @@ async def send_shareable_link(client, callback_query):
         return
 
     file_name = escape_markdown(file_doc["file_name"])
-    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
+    file_link = f"https://t.me/{BOT_USERNAME}?start=file_{file_id}"
 
     text = (
         f"✅ **File saved!**\n\n"
@@ -165,7 +165,50 @@ async def send_shareable_link(client, callback_query):
         disable_web_page_preview=True
     )
 
-# ---------------- RENAME HANDLER (DOWNLOAD PROGRESS ONLY) ----------------
+# ---------------- RENAME CALLBACK ----------------
+@app.on_callback_query(filters.regex(r"rename_(\d+)"))
+async def rename_file_prompt(client, callback_query):
+    file_id = int(callback_query.data.split("_")[1])
+    users_col.update_one(
+        {"user_id": callback_query.from_user.id},
+        {"$set": {"renaming_file_id": file_id}},
+        upsert=True
+    )
+    await callback_query.message.edit_text(
+        f"✏️ Send me the new file name.\n\n"
+        f"You can reply with plain text or use the command:\n"
+        f"/rename [NewFileName]\n\n"
+        f"_Tip: If you omit the extension, I'll keep the original one._",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
+        ]),
+        parse_mode=ParseMode.MARKDOWN
+    )
+    await callback_query.answer()
+
+# ---------------- PROGRESS BAR ----------------
+def create_progress_bar(current, total, length=15):
+    filled = math.floor(length * current / total)
+    empty = length - filled
+    return "▓" * filled + "░" * empty
+
+async def progress_hook(current, total, message_obj, start_time, user_name, operation="Downloading"):
+    percent = current * 100 / total
+    elapsed = time.time() - start_time
+    speed = current / 1024 / 1024 / max(elapsed, 0.001)  # MB/s
+    remaining = (total - current) / (current / max(elapsed, 0.001)) if current > 0 else 0
+    eta = str(datetime.timedelta(seconds=int(remaining)))
+    bar = create_progress_bar(current, total)
+    try:
+        await message_obj.edit_text(
+            f"⏳ {operation} for {user_name}\n"
+            f"{bar} {percent:.2f}%\n"
+            f"⚡ Speed: {speed:.2f} MB/s | ⏱️ ETA: {eta}"
+        )
+    except:
+        pass
+
+# ---------------- PERFORM RENAME ----------------
 async def perform_rename(user_id, new_name, message):
     user_doc = users_col.find_one({"user_id": user_id})
     if not user_doc or "renaming_file_id" not in user_doc:
@@ -189,39 +232,32 @@ async def perform_rename(user_id, new_name, message):
         await message.reply_text(f"❌ Error fetching original file: {str(e)}")
         return
 
-    file_size = orig_msg.document.file_size if orig_msg.document else \
-                orig_msg.video.file_size if orig_msg.video else \
-                orig_msg.audio.file_size
-
-    progress_msg = await message.reply_text(
-        f"✏️ Renaming your file: ⌛ Downloading...",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
-        parse_mode=ParseMode.MARKDOWN
-    )
-
     temp_file = f"downloads/{new_name}"
     start_time = time.time()
+    progress_msg = await message.reply_text(f"⬇️ Downloading {new_name} ...")
 
-    # ---------------- Download with progress ----------------
-    async def download_progress(current, total):
-        percent = current * 100 / total
-        bar_len = 10
-        filled = math.floor(bar_len * percent / 100)
-        bar = "▓" * filled + "░" * (bar_len - filled)
-        elapsed = time.time() - start_time
-        speed = current / 1024 / 1024 / max(elapsed, 0.001)
-        try:
-            await progress_msg.edit_text(f"⬇️ Downloading: {bar} {percent:.2f}% | {speed:.2f} MB/s")
-        except:
-            pass
+    # Download with live progress & ETA
+    await app.download_media(
+        orig_msg,
+        file_name=temp_file,
+        progress=lambda cur, tot: asyncio.create_task(
+            progress_hook(cur, tot, progress_msg, start_time, message.from_user.first_name, "Downloading")
+        )
+    )
 
-    await app.download_media(orig_msg, file_name=temp_file, progress=download_progress, progress_args=())
-
-    # ---------------- Upload WITHOUT progress (Heroku-safe) ----------------
-    sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
+    # Upload with live progress & ETA
+    start_time = time.time()
+    sent_msg = await app.send_document(
+        DATABASE_CHANNEL,
+        temp_file,
+        file_name=new_name,
+        progress=lambda cur, tot: asyncio.create_task(
+            progress_hook(cur, tot, progress_msg, start_time, message.from_user.first_name, "Uploading")
+        )
+    )
 
     files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
-    file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
+    file_link = f"https://t.me/{BOT_USERNAME}?start=file_{sent_msg.id}"
 
     await progress_msg.edit_text(
         f"✅ **File renamed & saved!**\n\n📂 New Name: {escape_markdown(new_name)}\n\n🔗 Link: {file_link}",
@@ -249,5 +285,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot running on Heroku-safe mode...")
+print("🔥 File Sharing Bot running with smooth progress, speed, and ETA display...")
 app.run()
