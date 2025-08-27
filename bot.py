@@ -329,7 +329,7 @@ async def rename_text(client, message):
         await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- BROADCAST ----------------
-@app.on_message(filters.command("broadcast") & filters.user(int(OWNER_ID)))
+@app.on_message(filters.command("broadcast") & filters.user(int(OWNER_IDS)))
 async def broadcast_handler(client, message):
     # Check if message is reply (media + caption) or text
     if not message.reply_to_message and len(message.command) < 2:
