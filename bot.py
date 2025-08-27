@@ -1,16 +1,25 @@
+import os
+import re
+import time
+import datetime
+import asyncio
+from pymongo import MongoClient
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
-from pymongo import MongoClient
-from config import *
-import datetime
-import asyncio
-import re
-import os
-import time
-import math
 
-# ---------------- MONGO DB SETUP ----------------
+# ---------------- ENVIRONMENT / CONFIG ----------------
+API_ID = int(os.getenv("API_ID", "123456"))
+API_HASH = os.getenv("API_HASH", "your_api_hash")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "your_bot_token")
+BOT_USERNAME = os.getenv("BOT_USERNAME", "Madara_FSBot")
+OWNER_USERNAME = os.getenv("OWNER_USERNAME", "YourUsername")
+FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "@YourChannel")
+SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/YourChannel")
+DATABASE_CHANNEL = int(os.getenv("DATABASE_CHANNEL", "-1001234567890"))  # Telegram channel ID to store files
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017")
+
+# ---------------- MONGO DB ----------------
 mongo = MongoClient(MONGO_URI)
 db = mongo["file_share_bot"]
 files_col = db["files"]
@@ -24,6 +33,10 @@ app = Client(
     bot_token=BOT_TOKEN
 )
 
+# ---------------- CANCEL FLAGS ----------------
+cancel_flags = {}
+rename_timers = {}
+
 # ---------------- ESCAPE MARKDOWN ----------------
 def escape_markdown(text: str) -> str:
     return re.sub(r"([_*\[\]()~`>#+-=|{}.!])", r"\\\1", text)
@@ -35,6 +48,30 @@ async def is_subscribed(user_id: int) -> bool:
         return member.status not in ["left", "kicked"]
     except:
         return False
+
+# ---------------- PROGRESS BAR ----------------
+async def progress_bar(current, total, start_time, message, prefix=""):
+    now = time.time()
+    elapsed = now - start_time
+    if elapsed == 0: elapsed = 0.001
+    speed = current / elapsed
+    speed_text = f"{speed/1024/1024:.2f} MB/s"
+
+    percentage = current / total * 100
+    filled_length = int(20 * current // total)
+    bar = "█" * filled_length + "—" * (20 - filled_length)
+
+    text = (
+        f"{prefix}\n"
+        f"`[{bar}] {percentage:.1f}%`\n"
+        f"Processed: {current/1024/1024:.2f}MB of {total/1024/1024:.2f}MB\n"
+        f"Speed: {speed_text}\n"
+        f"Elapsed: {int(elapsed)}s"
+    )
+    try:
+        await message.edit_text(text)
+    except:
+        pass
 
 # ---------------- START COMMAND ----------------
 @app.on_message(filters.command("start"))
@@ -155,7 +192,8 @@ async def send_shareable_link(client, callback_query):
         f"✅ **File saved!**\n\n"
         f"📂 File Name: {file_name}\n\n"
         f"🔗 Unique Shareable Link:\n{file_link}\n\n"
-        f"⚠️ Note: This link is safe and temporary."
+        f"⚠️ Note: This link is safe and temporary. "
+        "File will be removed automatically after 10 minutes for security & copyright reasons."
     )
 
     await callback_query.message.edit_text(
@@ -169,11 +207,8 @@ async def send_shareable_link(client, callback_query):
 @app.on_callback_query(filters.regex(r"rename_(\d+)"))
 async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
-    users_col.update_one(
-        {"user_id": callback_query.from_user.id},
-        {"$set": {"renaming_file_id": file_id}},
-        upsert=True
-    )
+    users_col.update_one({"user_id": callback_query.from_user.id},{"$set": {"renaming_file_id": file_id}})
+    
     await callback_query.message.edit_text(
         f"✏️ Send me the new file name.\n\n"
         f"You can reply with plain text or use the command:\n"
@@ -184,32 +219,10 @@ async def rename_file_prompt(client, callback_query):
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
-    await callback_query.answer()
 
-# ---------------- PROGRESS BAR ----------------
-def create_progress_bar(current, total, length=15):
-    filled = math.floor(length * current / total)
-    empty = length - filled
-    return "▓" * filled + "░" * empty
-
-async def progress_hook(current, total, message_obj, start_time, user_name, operation="Downloading"):
-    percent = current * 100 / total
-    elapsed = time.time() - start_time
-    speed = current / 1024 / 1024 / max(elapsed, 0.001)  # MB/s
-    remaining = (total - current) / (current / max(elapsed, 0.001)) if current > 0 else 0
-    eta = str(datetime.timedelta(seconds=int(remaining)))
-    bar = create_progress_bar(current, total)
-    try:
-        await message_obj.edit_text(
-            f"⏳ {operation} for {user_name}\n"
-            f"{bar} {percent:.2f}%\n"
-            f"⚡ Speed: {speed:.2f} MB/s | ⏱️ ETA: {eta}"
-        )
-    except:
-        pass
-
-# ---------------- PERFORM RENAME ----------------
+# ---------------- RENAME HANDLER ----------------
 async def perform_rename(user_id, new_name, message):
+    cancel_flags[user_id] = False
     user_doc = users_col.find_one({"user_id": user_id})
     if not user_doc or "renaming_file_id" not in user_doc:
         await message.reply_text("⚠️ First send a file and tap rename.")
@@ -228,51 +241,59 @@ async def perform_rename(user_id, new_name, message):
     os.makedirs("downloads", exist_ok=True)
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
+        start_time = time.time()
+        temp_file = await app.download_media(
+            orig_msg,
+            file_name=f"downloads/{new_name}",
+            progress=lambda cur, tot: asyncio.create_task(progress_bar(cur, tot, start_time, message, prefix="⏬ Downloading..."))
+        )
     except Exception as e:
-        await message.reply_text(f"❌ Error fetching original file: {str(e)}")
+        await message.reply_text(f"❌ Download error: {str(e)}")
         return
 
-    temp_file = f"downloads/{new_name}"
-    start_time = time.time()
-    progress_msg = await message.reply_text(f"⬇️ Downloading {new_name} ...")
-
-    # Download with live progress & ETA
-    await app.download_media(
-        orig_msg,
-        file_name=temp_file,
-        progress=lambda cur, tot: asyncio.create_task(
-            progress_hook(cur, tot, progress_msg, start_time, message.from_user.first_name, "Downloading")
+    try:
+        start_time = time.time()
+        sent_msg = await app.send_document(
+            DATABASE_CHANNEL,
+            temp_file,
+            file_name=new_name,
+            progress=lambda cur, tot: asyncio.create_task(progress_bar(cur, tot, start_time, message, prefix="⏫ Uploading..."))
         )
-    )
-
-    # Upload with live progress & ETA
-    start_time = time.time()
-    sent_msg = await app.send_document(
-        DATABASE_CHANNEL,
-        temp_file,
-        file_name=new_name,
-        progress=lambda cur, tot: asyncio.create_task(
-            progress_hook(cur, tot, progress_msg, start_time, message.from_user.first_name, "Uploading")
-        )
-    )
+    except Exception as e:
+        await message.reply_text(f"❌ Upload error: {str(e)}")
+        os.remove(temp_file)
+        return
 
     files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
     file_link = f"https://t.me/{BOT_USERNAME}?start=file_{sent_msg.id}"
 
-    await progress_msg.edit_text(
-        f"✅ **File renamed & saved!**\n\n📂 New Name: {escape_markdown(new_name)}\n\n🔗 Link: {file_link}",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)]]),
-        parse_mode=ParseMode.MARKDOWN
+    text = (
+        f"✅ **File renamed & saved!**\n\n"
+        f"📂 New Name: {escape_markdown(new_name)}\n\n"
+        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
+        f"⚠️ Note: This link is safe and temporary. "
+        "File will be removed automatically after 10 minutes for security & copyright reasons."
+    )
+
+    await message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🗃️ Open File", url=file_link)],
+            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
+        ]),
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True
     )
 
     os.remove(temp_file)
     users_col.update_one({"user_id":user_id},{"$unset":{"renaming_file_id":""}})
+    cancel_flags[user_id] = False
 
 # ---------------- RENAME COMMAND ----------------
 @app.on_message(filters.command("rename"))
 async def rename_command(client, message):
     parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
+    if len(parts) < 2: 
         await message.reply_text("Usage: /rename NewFileName")
         return
     await perform_rename(message.from_user.id, parts[1].strip(), message)
@@ -285,5 +306,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot running with smooth progress, speed, and ETA display...")
+print("🔥 Madara_FSBot running...")
 app.run()
