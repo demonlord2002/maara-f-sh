@@ -7,6 +7,8 @@ import datetime
 import asyncio
 import re
 import os
+import math
+import time
 
 # ---------------- MONGO DB SETUP ----------------
 mongo = MongoClient(MONGO_URI)
@@ -37,6 +39,25 @@ async def is_subscribed(user_id: int) -> bool:
         return member.status not in ["left", "kicked"]
     except:
         return False
+
+# ---------------- PROGRESS BAR ----------------
+def progress_bar(current, total, width=20):
+    done = int(width * current / total)
+    remaining = width - done
+    percent = (current / total) * 100
+    return f"[{'▓'*done}{'░'*remaining}] {percent:.2f}%"
+
+async def progress_for_pyrogram(current, total, message, prefix=""):
+    now = time.time()
+    if total == 0:
+        percent = 0
+    else:
+        percent = current / total * 100
+    text = f"{prefix} {progress_bar(current, total)}"
+    try:
+        await message.edit_text(text)
+    except:
+        pass
 
 # ---------------- START COMMAND ----------------
 @app.on_message(filters.command("start"))
@@ -205,15 +226,25 @@ async def perform_rename(user_id, new_name, message):
 
     os.makedirs("downloads", exist_ok=True)
     try:
+        status_msg = await message.reply_text("📥 Downloading file...")
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
-        temp_file = await app.download_media(orig_msg, file_name=f"downloads/{new_name}")
+        temp_file = await app.download_media(
+            orig_msg,
+            file_name=f"downloads/{new_name}",
+            progress=lambda c, t: asyncio.create_task(progress_for_pyrogram(c, t, status_msg, prefix="📥 Downloading:"))
+        )
     except Exception as e:
         await message.reply_text(f"❌ Download error: {str(e)}")
         return
 
-    # Upload renamed file
     try:
-        sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name)
+        await status_msg.edit_text("📤 Uploading file...")
+        sent_msg = await app.send_document(
+            DATABASE_CHANNEL,
+            temp_file,
+            file_name=new_name,
+            progress=lambda c, t: asyncio.create_task(progress_for_pyrogram(c, t, status_msg, prefix="📤 Uploading:"))
+        )
     except Exception as e:
         await message.reply_text(f"❌ Upload error: {str(e)}")
         os.remove(temp_file)
@@ -230,7 +261,7 @@ async def perform_rename(user_id, new_name, message):
         "File will be removed automatically after 10 minutes for security & copyright reasons."
     )
 
-    await message.reply_text(
+    await status_msg.edit_text(
         text,
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)],
                                            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
@@ -259,5 +290,5 @@ async def rename_text(client, message):
     await perform_rename(message.from_user.id, message.text.strip(), message)
 
 # ---------------- RUN BOT ----------------
-print("🔥 File Sharing Bot running...")
+print("🔥 File Sharing Bot running with live progress bars...")
 app.run()
