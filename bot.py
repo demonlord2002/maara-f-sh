@@ -3,6 +3,7 @@ import re
 import time
 import datetime
 import asyncio
+import io
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
@@ -227,60 +228,48 @@ async def perform_rename(user_id, new_name, message):
     if not new_name.endswith(orig_ext):
         new_name += orig_ext
 
-    os.makedirs("downloads", exist_ok=True)
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         start_time = time.time()
 
-        # ✅ Thread-safe progress
         def download_progress(cur, tot):
             asyncio.run_coroutine_threadsafe(
                 progress_bar(cur, tot, start_time, message, prefix="⏬ Downloading..."),
                 loop=asyncio.get_event_loop()
             )
 
-        temp_file = await app.download_media(orig_msg, file_name=f"downloads/{new_name}", progress=download_progress)
-    except Exception as e:
-        await message.reply_text(f"❌ Download error: {str(e)}")
-        return
+        temp_file = await app.download_media(orig_msg, file_name=new_name, progress=download_progress)
 
-    try:
         start_time = time.time()
-
         def upload_progress(cur, tot):
             asyncio.run_coroutine_threadsafe(
                 progress_bar(cur, tot, start_time, message, prefix="⏫ Uploading..."),
                 loop=asyncio.get_event_loop()
             )
 
-        sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name, progress=upload_progress)
+        # ✅ Use BytesIO for safe upload on Heroku
+        with open(temp_file, "rb") as f:
+            file_bytes = io.BytesIO(f.read())
+            file_bytes.name = new_name
+            sent_msg = await app.send_document(DATABASE_CHANNEL, file_bytes, file_name=new_name, progress=upload_progress)
+
     except Exception as e:
-        await message.reply_text(f"❌ Upload error: {str(e)}")
-        os.remove(temp_file)
+        await message.reply_text(f"❌ Error: {str(e)}")
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
         return
 
     files_col.update_one({"file_id": file_id},{"$set":{"file_id":sent_msg.id,"chat_id":DATABASE_CHANNEL,"file_name":new_name}})
     file_link = f"https://t.me/{BOT_USERNAME}?start=file_{sent_msg.id}"
 
-    text = (
-        f"✅ **File renamed & saved!**\n\n"
-        f"📂 New Name: {escape_markdown(new_name)}\n\n"
-        f"🔗 Unique Shareable Link:\n{file_link}\n\n"
-        f"⚠️ Note: This link is safe and temporary. "
-        "File will be removed automatically after 10 minutes for security & copyright reasons."
-    )
-
     await message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🗃️ Open File", url=file_link)],
-            [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
-        ]),
-        parse_mode=ParseMode.MARKDOWN,
-        disable_web_page_preview=True
+        f"✅ **File renamed & saved!**\n\n📂 New Name: `{escape_markdown(new_name)}`\n\n🔗 Link: {file_link}",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗃️ Open File", url=file_link)]]),
+        parse_mode=ParseMode.MARKDOWN
     )
 
-    os.remove(temp_file)
+    if os.path.exists(temp_file):
+        os.remove(temp_file)
     users_col.update_one({"user_id":user_id},{"$unset":{"renaming_file_id":""}})
     cancel_flags[user_id] = False
 
