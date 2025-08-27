@@ -25,7 +25,6 @@ app = Client(
 
 # ---------------- CANCEL FLAGS ----------------
 cancel_flags = {}
-rename_timers = {}
 
 # ---------------- ESCAPE MARKDOWN ----------------
 def escape_markdown(text: str) -> str:
@@ -232,23 +231,24 @@ async def perform_rename(user_id, new_name, message):
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         start_time = time.time()
-        temp_file = await app.download_media(
-            orig_msg,
-            file_name=f"downloads/{new_name}",
-            progress=lambda cur, tot: asyncio.create_task(progress_bar(cur, tot, start_time, message, prefix="⏬ Downloading..."))
-        )
+
+        # Proper download progress
+        def download_progress(cur, tot):
+            asyncio.get_running_loop().create_task(progress_bar(cur, tot, start_time, message, prefix="⏬ Downloading..."))
+
+        temp_file = await app.download_media(orig_msg, file_name=f"downloads/{new_name}", progress=download_progress)
     except Exception as e:
         await message.reply_text(f"❌ Download error: {str(e)}")
         return
 
     try:
         start_time = time.time()
-        sent_msg = await app.send_document(
-            DATABASE_CHANNEL,
-            temp_file,
-            file_name=new_name,
-            progress=lambda cur, tot: asyncio.create_task(progress_bar(cur, tot, start_time, message, prefix="⏫ Uploading..."))
-        )
+
+        # Proper upload progress
+        def upload_progress(cur, tot):
+            asyncio.get_running_loop().create_task(progress_bar(cur, tot, start_time, message, prefix="⏫ Uploading..."))
+
+        sent_msg = await app.send_document(DATABASE_CHANNEL, temp_file, file_name=new_name, progress=upload_progress)
     except Exception as e:
         await message.reply_text(f"❌ Upload error: {str(e)}")
         os.remove(temp_file)
