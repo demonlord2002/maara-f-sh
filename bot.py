@@ -50,6 +50,7 @@ async def progress(current, total, message, prefix="", user_id=None):
             ])
         )
     except:
+        # message may be deleted or edited too frequently; ignore
         pass
 
 # ---------------- CANCEL BUTTON CALLBACK ----------------
@@ -70,7 +71,7 @@ async def start(client, message):
         if file_doc:
             if not await is_subscribed(message.from_user.id):
                 await message.reply_text(
-                    f"🚨 Join channel first!\n👉 {SUPPORT_LINK}",
+                    "🚨 Join channel first!\n👉 {}".format(SUPPORT_LINK),
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)]])
                 )
                 return
@@ -99,7 +100,7 @@ async def start(client, message):
     # Subscription check
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
-            f"🚨 Access Restricted! Join our channel first.",
+            "🚨 Access Restricted! Join our channel first.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Join Channel ✅", url=SUPPORT_LINK)],
                 [InlineKeyboardButton("✅ Verify Joined", callback_data="verify_sub")]
@@ -173,19 +174,25 @@ async def rename_file_prompt(client, callback_query):
         {"user_id": callback_query.from_user.id},
         {"$set": {"renaming_file_id": file_id}}
     )
-    await callback_query.message.edit_text("✏️ Send me the new file name (without extension if you want me to auto-add).")
+    example = "www.1TamilMV.blue - Kingdom (2025) Tamil HQ HDRip - x264 - AAC - 400MB - ESub.mkv"
+    await callback_query.message.edit_text(
+        "✏️ Send me the **new file name**.\n\n"
+        "You can reply with plain text **or** use the command:\n"
+        f"`/rename {example}`\n\n"
+        "_Tip: If you omit the extension, I'll keep the original one._",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
-# ---------------- HANDLE RENAME & RE-UPLOAD ----------------
-@app.on_message(filters.text)
-async def handle_rename(client, message):
-    cancel_flags[message.from_user.id] = False  # reset cancel flag
+# ---------------- INTERNAL: DO RENAME ----------------
+async def perform_rename_and_reupload(user_id: int, new_name: str, message):
+    cancel_flags[user_id] = False  # reset cancel flag
 
-    user_doc = users_col.find_one({"user_id": message.from_user.id})
+    user_doc = users_col.find_one({"user_id": user_id})
     if not user_doc or "renaming_file_id" not in user_doc:
+        await message.reply_text("⚠️ First send a file and tap **Yes, rename ✏️**.", parse_mode=ParseMode.MARKDOWN)
         return
 
     file_id = user_doc["renaming_file_id"]
-    new_name = message.text.strip()
 
     # Get original file info
     file_doc = files_col.find_one({"file_id": file_id})
@@ -193,7 +200,7 @@ async def handle_rename(client, message):
         await message.reply_text("❌ Original file not found!")
         return
 
-    # Auto append original extension if missing
+    # Normalize new name (auto-append original extension if user omitted)
     orig_ext = os.path.splitext(file_doc["file_name"])[1]
     if not new_name.endswith(orig_ext):
         new_name = f"{new_name}{orig_ext}"
@@ -201,47 +208,54 @@ async def handle_rename(client, message):
     # Ensure downloads folder exists
     os.makedirs("downloads", exist_ok=True)
 
+    # Download original
     try:
         orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
         temp_file = await app.download_media(
             message=orig_msg,
             file_name=f"downloads/{new_name}",
             progress=lambda c, t: asyncio.get_event_loop().create_task(
-                progress(c, t, message, "Downloading:", message.from_user.id)
+                progress(c, t, message, "Downloading:", user_id)
             )
         )
-
-        # Fix: Handle failed download
         if not temp_file or not os.path.exists(temp_file):
             await message.reply_text("❌ Download failed. Please try again.")
             return
-
     except asyncio.CancelledError:
         await message.reply_text("❌ Download cancelled by user.")
         return
+    except Exception as e:
+        await message.reply_text(f"❌ Download error: `{str(e)}`", parse_mode=ParseMode.MARKDOWN)
+        return
 
+    # Re-upload with new name
     try:
         if temp_file.endswith((".mp4", ".mkv", ".mov")):
             sent_msg = await app.send_video(
                 DATABASE_CHANNEL, temp_file, file_name=new_name,
                 progress=lambda c, t: asyncio.get_event_loop().create_task(
-                    progress(c, t, message, "Uploading:", message.from_user.id)
+                    progress(c, t, message, "Uploading:", user_id)
                 )
             )
         elif temp_file.endswith((".mp3", ".m4a", ".wav")):
             sent_msg = await app.send_audio(
                 DATABASE_CHANNEL, temp_file, file_name=new_name,
                 progress=lambda c, t: asyncio.get_event_loop().create_task(
-                    progress(c, t, message, "Uploading:", message.from_user.id)
+                    progress(c, t, message, "Uploading:", user_id)
                 )
             )
         else:
             sent_msg = await app.send_document(
                 DATABASE_CHANNEL, temp_file, file_name=new_name,
                 progress=lambda c, t: asyncio.get_event_loop().create_task(
-                    progress(c, t, message, "Uploading:", message.from_user.id)
+                    progress(c, t, message, "Uploading:", user_id)
                 )
             )
+    except asyncio.CancelledError:
+        await message.reply_text("❌ Upload cancelled by user.")
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        return
     except Exception as e:
         await message.reply_text(f"❌ Upload failed: `{str(e)}`", parse_mode=ParseMode.MARKDOWN)
         if os.path.exists(temp_file):
@@ -275,8 +289,34 @@ async def handle_rename(client, message):
     except:
         pass
 
-    users_col.update_one({"user_id": message.from_user.id}, {"$unset": {"renaming_file_id": ""}})
-    cancel_flags[message.from_user.id] = False
+    users_col.update_one({"user_id": user_id}, {"$unset": {"renaming_file_id": ""}})
+    cancel_flags[user_id] = False
+
+# ---------------- /rename COMMAND ----------------
+@app.on_message(filters.command("rename"))
+async def rename_command(client, message):
+    # Get everything after /rename (handles spaces & punctuation)
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        example = "www.1TamilMV.blue - Kingdom (2025) Tamil HQ HDRip - x264 - AAC - 400MB - ESub.mkv"
+        await message.reply_text(
+            f"Usage:\n`/rename {example}`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    new_name = parts[1].strip()
+    await perform_rename_and_reupload(message.from_user.id, new_name, message)
+
+# ---------------- PLAIN TEXT RENAME (still supported) ----------------
+@app.on_message(filters.text & ~filters.command(["start", "rename"]))
+async def handle_rename_text(client, message):
+    # Only act if user previously tapped "Yes, rename"
+    user_doc = users_col.find_one({"user_id": message.from_user.id})
+    if not user_doc or "renaming_file_id" not in user_doc:
+        return
+    new_name = message.text.strip()
+    await perform_rename_and_reupload(message.from_user.id, new_name, message)
 
 # ---------------- LINK CALLBACK ----------------
 @app.on_callback_query(filters.regex(r"link_(\d+)"))
