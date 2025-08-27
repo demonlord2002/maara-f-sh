@@ -23,9 +23,6 @@ app = Client(
     bot_token=BOT_TOKEN
 )
 
-# ---------------- CANCEL FLAGS ----------------
-cancel_flags = {}  # user_id: True/False
-
 # ---------------- ESCAPE MARKDOWN ----------------
 def escape_markdown(text: str) -> str:
     return re.sub(r"([_*\[\]()~`>#+-=|{}.!])", r"\\\1", text)
@@ -184,8 +181,7 @@ async def rename_file_prompt(client, callback_query):
     users_col.update_one({"user_id": callback_query.from_user.id}, {"$set": {"renaming_file_id": file_id}})
 
     await callback_query.message.edit_text(
-        f"✏️ Send me the new file name.\n\n"
-        f"Use plain text or /rename [NewFileName].\n"
+        f"✏️ Send me the new file name.\n\nUse plain text or /rename [NewFileName].\n"
         f"_Tip: If you omit the extension, I keep the original._",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]]),
         parse_mode=ParseMode.MARKDOWN
@@ -210,33 +206,38 @@ async def perform_rename(user_id, new_name, message):
     if not new_name.endswith(orig_ext):
         new_name += orig_ext
 
-    os.makedirs("downloads", exist_ok=True)
-
+    os.makedirs("/tmp/downloads", exist_ok=True)
     status_msg = await message.reply_text("📥 Downloading file...")
-    orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
-    temp_file = await app.download_media(
-        orig_msg,
-        file_name=f"downloads/{new_name}",
-        progress=lambda c, t: asyncio.create_task(progress_for_pyrogram(c, t, status_msg, prefix="📥 Downloading:"))
-    )
 
-    if not temp_file:
-        await status_msg.edit_text("❌ Download failed. Try again.")
+    try:
+        orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
+        temp_file = await app.download_media(
+            orig_msg,
+            file_name=f"/tmp/downloads/{new_name}",
+            progress=lambda c, t: asyncio.create_task(progress_for_pyrogram(c, t, status_msg, prefix="📥 Downloading:"))
+        )
+
+        if not temp_file:
+            await status_msg.edit_text("❌ Download failed. Possibly file too large or missing.")
+            return
+
+        await status_msg.edit_text("📤 Uploading file...")
+        sent_msg = await app.send_document(
+            DATABASE_CHANNEL,
+            temp_file,
+            file_name=new_name,
+            progress=lambda c, t: asyncio.create_task(progress_for_pyrogram(c, t, status_msg, prefix="📤 Uploading:"))
+        )
+
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Error: {str(e)}")
         return
-
-    await status_msg.edit_text("📤 Uploading file...")
-    sent_msg = await app.send_document(
-        DATABASE_CHANNEL,
-        temp_file,
-        file_name=new_name,
-        progress=lambda c, t: asyncio.create_task(progress_for_pyrogram(c, t, status_msg, prefix="📤 Uploading:"))
-    )
 
     files_col.update_one({"file_id": file_id}, {"$set": {"file_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}})
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
     await status_msg.edit_text(
-        f"✅ **File renamed & saved!**\n\n📂 New Name: {escape_markdown(new_name)}\n\n🔗 Shareable Link:\n{file_link}",
+        f"✅ **File renamed & saved!**\n\n📂 {escape_markdown(new_name)}\n\n🔗 Shareable Link:\n{file_link}",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🗃️ Open File", url=file_link)],
             [InlineKeyboardButton("Support Channel ✅", url=SUPPORT_LINK)]
