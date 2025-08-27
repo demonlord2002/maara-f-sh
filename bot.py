@@ -205,6 +205,7 @@ async def sample_info(client, callback_query):
     )
 
 # ---------------- SAMPLE COMMAND ----------------
+
 @app.on_message(filters.command("sample"))
 async def sample_trim(client, message: Message):
     if not message.reply_to_message or not (
@@ -241,10 +242,22 @@ async def sample_trim(client, message: Message):
 
     await msg.edit("✂️ Trimming sample video...")
 
-    ffmpeg_cmd = f"ffmpeg -ss {start_sec} -i {shlex.quote(input_path)} -t {duration} -c:v libx264 -c:a aac -strict experimental -y {shlex.quote(output_path)}"
-    
-    process = await asyncio.create_subprocess_shell(
-        ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    # FFmpeg command: safe, works for videos with or without audio
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-i", input_path,
+        "-ss", str(start_sec),
+        "-t", str(duration),
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-y",
+        output_path
+    ]
+
+    process = await asyncio.create_subprocess_exec(
+        *ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stdout, stderr = await process.communicate()
 
@@ -253,6 +266,7 @@ async def sample_trim(client, message: Message):
         return await msg.edit(f"❌ Failed to generate sample. FFmpeg error:\n{stderr.decode()}")
 
     await msg.edit("📤 Uploading sample...")
+
     await client.send_video(
         chat_id=message.chat.id,
         video=output_path,
@@ -261,7 +275,7 @@ async def sample_trim(client, message: Message):
 
     os.remove(input_path)
     os.remove(output_path)
-
+    await msg.delete()
 
 # ---------------- (REMAINING ORIGINAL BOT LOGIC BELOW) ----------------
 # Include all your rename, link, set_thumb, del_thumb, broadcast logic here as is.
