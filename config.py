@@ -19,7 +19,7 @@ SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/Fallen_Angels_Team")
 # ---------------- MONGO DB ----------------
 MONGO_URI = os.getenv(
     "MONGO_URI",
-    "mongodb+srv://rubesh08virat:rubesh08virat@cluster0.d33p1rm.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+    "mongodb+srv://markusmarwin2002:markusmarwin2002@cluster0.cgidefq.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 )
 
 # ---------------- OPTIONAL ----------------
