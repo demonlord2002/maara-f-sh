@@ -14,7 +14,7 @@ FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "@Fallen_Angels_T
 
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS", "7813285237").split(",")))
 OWNER_USERNAME = os.getenv("OWNER_USERNAME", "SunsetOfMe")
-SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/Fallen_Angels_Team")
+SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/The_Architect_II")
 
 # ---------------- MONGO DB ----------------
 MONGO_URI = os.getenv(
