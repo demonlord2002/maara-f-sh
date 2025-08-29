@@ -34,7 +34,7 @@
     },
     "MONGO_URI": {
       "description": "MongoDB URI for storing permanent file records",
-      "value": "mongodb+srv://xarwin2:xarwin2002@cluster0.qmetx2m.mongodb.net/?retryWrites=true&w=majority",
+      "value": "mongodb+srv://markusmarwin2002:markusmarwin2002@cluster0.cgidefq.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
       "required": true
     },
     "FORCE_SUBSCRIBE_CHANNEL": {
