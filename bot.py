@@ -71,7 +71,7 @@ def progress_callback(status_message, prefix=""):
 
 # ---------------- HELPER: GET FILE DOC ----------------
 def get_file_doc_by_any_id(fid, active_only=False):
-    query = {"$or": [{"message_id": fid}, {"file_id": fid}]}
+    query = {"$or": [{"message_id": fid}, {"file_unique_id": fid}]}
     if active_only:
         query["status"] = "active"
     return files_col.find_one(query)
