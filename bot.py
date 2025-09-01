@@ -8,8 +8,6 @@ import asyncio
 import re
 import os
 import time
-import traceback
-import shlex
 import subprocess
 import imageio_ffmpeg as ffmpeg
 
@@ -29,7 +27,7 @@ app = Client(
 
 # ---------------- ESCAPE MARKDOWN ----------------
 def escape_markdown(text: str) -> str:
-    return re.sub(r"([_*\[\]()~`>#+-=|{}.!])", r"\\\1", text)
+    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\\1", text)
 
 # ---------------- FORCE SUBSCRIBE CHECK ----------------
 async def is_subscribed(user_id: int) -> bool:
@@ -51,7 +49,7 @@ def progress_callback(status_message, prefix=""):
     def callback(current, total):
         nonlocal last_update
         now = time.time()
-        if now - last_update < 3:  # update every 3 seconds
+        if now - last_update < 3:
             return
         last_update = now
 
@@ -60,7 +58,6 @@ def progress_callback(status_message, prefix=""):
         percent = (current / total * 100) if total else 0
         text = f"{prefix} [{'▓'*done}{'░'*remaining}] {percent:.2f}%"
 
-        # thread-safe edit
         async def edit():
             async with lock:
                 try:
@@ -72,13 +69,20 @@ def progress_callback(status_message, prefix=""):
 
     return callback
 
+# ---------------- HELPER: GET FILE DOC ----------------
+def get_file_doc_by_any_id(fid, active_only=False):
+    query = {"$or": [{"message_id": fid}, {"file_id": fid}]}
+    if active_only:
+        query["status"] = "active"
+    return files_col.find_one(query)
+
 # ---------------- START COMMAND ----------------
 @app.on_message(filters.command("start"))
 async def start(client, message):
     args = message.text.split(maxsplit=1)
     if len(args) > 1 and args[1].startswith("file_"):
         file_id = int(args[1].replace("file_", ""))
-        file_doc = files_col.find_one({"file_id": file_id, "status": "active"})
+        file_doc = get_file_doc_by_any_id(file_id, active_only=True)
         if file_doc:
             if not await is_subscribed(message.from_user.id):
                 await message.reply_text(
@@ -90,24 +94,20 @@ async def start(client, message):
                 )
                 return
 
-            # ✅ Send file
             sent_msg = await app.copy_message(
-            chat_id=message.chat.id,
-            from_chat_id=file_doc["chat_id"],
-            message_id=file_doc["message_id"]
-                
-           )
+                chat_id=message.chat.id,
+                from_chat_id=file_doc["chat_id"],
+                message_id=file_doc["message_id"]
+            )
 
-            # ⚠️ Show Madara-style warning
             warn_msg = await message.reply_text(
                 "⚠️ **Due to copyright ©️ issues this file will be auto-deleted in 10 minutes!**\n\n"
                 "💾 Save it to your **Saved Messages** immediately ⚡\n\n"
                 "👑 Madara protects his Family ❤️🥷"
             )
 
-            # ⏳ Schedule auto-delete after 10 minutes
             async def delete_later():
-                await asyncio.sleep(600)  # 600 sec = 10 min
+                await asyncio.sleep(600)
                 try:
                     await sent_msg.delete()
                     await warn_msg.edit_text("❌ File deleted automatically due to copyright ©️ rules.")
@@ -120,7 +120,6 @@ async def start(client, message):
             await message.reply_text("❌ File not available.")
             return
 
-    # ✅ Save user in DB
     users_col.update_one(
         {"user_id": message.from_user.id},
         {"$set": {
@@ -131,7 +130,6 @@ async def start(client, message):
         upsert=True
     )
 
-    # ✅ Force subscribe check
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
             "⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
@@ -144,7 +142,6 @@ async def start(client, message):
         )
         return
 
-    # ✅ Default welcome message
     await message.reply_text(
         f"👑 𝗠𝗮𝗱𝗮𝗿𝗮 𝗪𝗲𝗹𝗰𝗼𝗺𝗲𝘀 𝗬𝗼𝘂 👑\n\n"
         f"✨ 𝗛𝗲𝗹𝗹𝗼 {escape_markdown(message.from_user.first_name)} ❤️\n\n"
@@ -155,7 +152,6 @@ async def start(client, message):
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
-
 
 # ---------------- VERIFY ----------------
 @app.on_callback_query(filters.regex("verify_sub"))
@@ -185,18 +181,19 @@ async def handle_file(client, message):
     fwd_msg = await app.copy_message(DATABASE_CHANNEL, message.chat.id, message.id)
 
     files_col.insert_one({
-        "message_id": fwd_msg.id,                    # Telegram message ID
-        "chat_id": fwd_msg.chat.id,                  # DB channel ID
+        "message_id": fwd_msg.id,
+        "chat_id": fwd_msg.chat.id,
         "file_unique_id": (message.document.file_unique_id 
                            if message.document else 
                            message.video.file_unique_id 
                            if message.video else 
                            message.audio.file_unique_id),
-       "user_id": message.from_user.id,
-       "file_name": file_name,
-       "timestamp": datetime.datetime.now(datetime.timezone.utc),
-       "status": "active"
- })
+        "user_id": message.from_user.id,
+        "file_name": file_name,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc),
+        "status": "active"
+    })
+
     await message.reply_text(
         f"✅ **File received!**\n\n"
         f"💡 **Do you want to rename before getting a shareable link?**\n\n"
@@ -213,10 +210,10 @@ async def handle_file(client, message):
     )
 
 # ---------------- SAMPLE BUTTON ----------------
-@app.on_callback_query(filters.regex(r"sample_(\d+)"))
+@app.on_callback_query(filters.regex(r"sample_(\\d+)"))
 async def sample_info(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
-    file_doc = files_col.find_one({"file_id": file_id})
+    file_doc = get_file_doc_by_any_id(file_id)
     if not file_doc:
         return await callback_query.message.edit_text("❌ File not found!")
 
@@ -236,20 +233,17 @@ ffmpeg_path = ffmpeg.get_ffmpeg_exe()
 
 @app.on_message(filters.command("sample"))
 async def sample_trim(client, message: Message):
-    # Check if message is a reply to a video/document
     if not message.reply_to_message or not (
         message.reply_to_message.video or message.reply_to_message.document
     ):
         return await message.reply("⚠️ Please reply to a video file with:\n/sample HH:MM:SS to HH:MM:SS")
 
-    # Parse command times
-    match = re.search(r"(\d{2}):(\d{2}):(\d{2})\s+to\s+(\d{2}):(\d{2}):(\d{2})", message.text)
+    match = re.search(r"(\\d{2}):(\\d{2}):(\\d{2})\\s+to\\s+(\\d{2}):(\\d{2}):(\\d{2})", message.text)
     if not match:
         return await message.reply("❌ Invalid format. Use:\n/sample 00:10:00 to 00:10:30")
 
     h1, m1, s1, h2, m2, s2 = map(int, match.groups())
 
-    # Validate seconds & minutes
     for val in [m1, s1, m2, s2]:
         if val >= 60:
             return await message.reply("⚠️ Minutes and seconds must be less than 60!")
@@ -271,7 +265,6 @@ async def sample_trim(client, message: Message):
     output_path = f"/tmp/sample_clip_{message.from_user.id}.mp4"
     await msg.edit("✂️ Trimming sample video...")
 
-    # FFmpeg command using imageio-ffmpeg executable
     ffmpeg_cmd = [
         ffmpeg_path,
         "-i", input_path,
@@ -294,7 +287,6 @@ async def sample_trim(client, message: Message):
         os.remove(input_path)
         return await msg.edit(f"❌ FFmpeg execution failed:\n{e}")
 
-    # Check output validity
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         os.remove(input_path)
         return await msg.edit(f"❌ Failed to generate sample. FFmpeg error:\n{stderr.decode()}")
@@ -307,22 +299,21 @@ async def sample_trim(client, message: Message):
         caption=f"✂️ Sample clip from {h1:02}:{m1:02}:{s1:02} to {h2:02}:{m2:02}:{s2:02}"
     )
 
-    # Cleanup
     os.remove(input_path)
     os.remove(output_path)
     await msg.delete()
-    
+
 # ---------------- LINK CALLBACK ----------------
-@app.on_callback_query(filters.regex(r"link_(\d+)"))
+@app.on_callback_query(filters.regex(r"link_(\\d+)"))
 async def send_shareable_link(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
-    file_doc = files_col.find_one({"file_id": file_id})
+    file_doc = get_file_doc_by_any_id(file_id)
     if not file_doc:
         await callback_query.message.edit_text("❌ File not found!")
         return
 
     file_name = escape_markdown(file_doc["file_name"])
-    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
+    file_link = f"https://t.me/Madara_FSBot?start=file_{file_doc['message_id']}"
 
     await callback_query.message.edit_text(
         f"✅ **File saved!**\n\n📂 File Name: {file_name}\n\n🔗 Shareable Link:\n{file_link}",
@@ -332,7 +323,7 @@ async def send_shareable_link(client, callback_query):
     )
 
 # ---------------- RENAME CALLBACK ----------------
-@app.on_callback_query(filters.regex(r"rename_(\d+)"))
+@app.on_callback_query(filters.regex(r"rename_(\\d+)"))
 async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
     users_col.update_one({"user_id": callback_query.from_user.id}, {"$set": {"renaming_file_id": file_id}})
