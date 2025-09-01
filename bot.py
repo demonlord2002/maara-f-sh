@@ -379,24 +379,23 @@ async def perform_rename(user_id, new_name, message):
         await message.reply_text("⚠️ First send a file and tap rename.")
         return
 
-    file_id = user_doc["renaming_file_id"]
-    file_doc = get_file_doc_by_any_id(file_id)  # ✅ Use your helper for permanent link
-    if not file_doc:
+    orig_file_id = user_doc["renaming_file_id"]
+    orig_doc = get_file_doc_by_any_id(orig_file_id)
+    if not orig_doc:
         await message.reply_text("❌ Original file not found!")
         return
 
-    # Sanitize filename
+    # Sanitize new filename
     new_name = sanitize_filename(new_name)
-    orig_ext = os.path.splitext(file_doc["file_name"])[1]
+    orig_ext = os.path.splitext(orig_doc["file_name"])[1]
     if not new_name.endswith(orig_ext):
         new_name += orig_ext
 
     os.makedirs("/tmp/downloads", exist_ok=True)
-    status_msg = await message.reply_text("📥 Downloading file...")
+    status_msg = await message.reply_text("📥 Downloading original file...")
 
     try:
-        # Download original message
-        orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["message_id"])
+        orig_msg = await app.get_messages(orig_doc["chat_id"], orig_doc["message_id"])
         temp_file = await app.download_media(
             orig_msg,
             file_name=f"/tmp/downloads/{new_name}",
@@ -404,10 +403,10 @@ async def perform_rename(user_id, new_name, message):
         )
 
         if not temp_file:
-            await status_msg.edit_text("❌ Download failed. Possibly file too large or missing.")
+            await status_msg.edit_text("❌ Download failed.")
             return
 
-        await status_msg.edit_text("📤 Uploading file...")
+        await status_msg.edit_text("📤 Uploading renamed file...")
 
         thumb_path = user_doc.get("thumbnail")
         sent_msg = await app.send_document(
@@ -422,14 +421,20 @@ async def perform_rename(user_id, new_name, message):
         await status_msg.edit_text(f"❌ Error: {str(e)}")
         return
 
-    # Update DB
-    files_col.update_one(
-        {"file_id": file_id},
-        {"$set": {"file_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}}
-    )
+    # ✅ Insert a NEW DB record for the renamed file (clone)
+    files_col.insert_one({
+        "message_id": sent_msg.id,
+        "chat_id": DATABASE_CHANNEL,
+        "file_unique_id": orig_doc.get("file_unique_id"),
+        "user_id": user_id,
+        "file_name": new_name,
+        "original_file_id": orig_doc.get("message_id"),  # reference to original
+        "timestamp": datetime.datetime.now(datetime.timezone.utc),
+        "status": "active"
+    })
 
-    # Permanent shareable link using original message_id
-    file_link = f"https://t.me/Madara_FSBot?start=file_{file_doc['message_id']}"
+    # Permanent link for the renamed file (based on new message_id)
+    file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
     await status_msg.edit_text(
         f"✅ **File renamed & saved!**\n\n📂 {escape_markdown(new_name)}\n\n🔗 Shareable Link:\n{file_link}",
@@ -444,7 +449,6 @@ async def perform_rename(user_id, new_name, message):
     os.remove(temp_file)
     users_col.update_one({"user_id": user_id}, {"$unset": {"renaming_file_id": ""}})
 
-
 # ---------------- RENAME COMMAND ----------------
 @app.on_message(filters.command("rename"))
 async def rename_command(client, message):
@@ -453,7 +457,6 @@ async def rename_command(client, message):
         await message.reply_text("Usage: /rename NewFileName")
         return
     await perform_rename(message.from_user.id, parts[1].strip(), message)
-
 
 # ---------------- RENAME TEXT REPLY ----------------
 @app.on_message(filters.text & ~filters.command(["start", "rename", "set_thumb", "del_thumb", "broadcast"]))
