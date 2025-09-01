@@ -210,7 +210,7 @@ async def handle_file(client, message):
     )
 
 # ---------------- SAMPLE BUTTON ----------------
-@app.on_callback_query(filters.regex(r"sample_(\\d+)"))
+@app.on_callback_query(filters.regex(r"sample_(\d+)"))
 async def sample_info(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
     file_doc = get_file_doc_by_any_id(file_id)
@@ -304,7 +304,7 @@ async def sample_trim(client, message: Message):
     await msg.delete()
 
 # ---------------- LINK CALLBACK ----------------
-@app.on_callback_query(filters.regex(r"link_(\\d+)"))
+@app.on_callback_query(filters.regex(r"link_(\d+)"))
 async def send_shareable_link(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
     file_doc = get_file_doc_by_any_id(file_id)
@@ -323,7 +323,7 @@ async def send_shareable_link(client, callback_query):
     )
 
 # ---------------- RENAME CALLBACK ----------------
-@app.on_callback_query(filters.regex(r"rename_(\\d+)"))
+@app.on_callback_query(filters.regex(r"rename_(\d+)"))
 async def rename_file_prompt(client, callback_query):
     file_id = int(callback_query.data.split("_")[1])
     users_col.update_one({"user_id": callback_query.from_user.id}, {"$set": {"renaming_file_id": file_id}})
