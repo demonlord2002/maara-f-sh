@@ -27,7 +27,7 @@ app = Client(
 
 # ---------------- ESCAPE MARKDOWN ----------------
 def escape_markdown(text: str) -> str:
-    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\\1", text)
+    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", text)
 
 # ---------------- FORCE SUBSCRIBE CHECK ----------------
 async def is_subscribed(user_id: int) -> bool:
@@ -238,7 +238,7 @@ async def sample_trim(client, message: Message):
     ):
         return await message.reply("⚠️ Please reply to a video file with:\n/sample HH:MM:SS to HH:MM:SS")
 
-    match = re.search(r"(\\d{2}):(\\d{2}):(\\d{2})\\s+to\\s+(\\d{2}):(\\d{2}):(\\d{2})", message.text)
+    match = re.search(r"(\d{2}):(\d{2}):(\d{2})\s+to\s+(\d{2}):(\d{2}):(\d{2})", message.text)
     if not match:
         return await message.reply("❌ Invalid format. Use:\n/sample 00:10:00 to 00:10:30")
 
