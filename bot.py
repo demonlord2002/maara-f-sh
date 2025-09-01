@@ -380,7 +380,7 @@ async def perform_rename(user_id, new_name, message):
         return
 
     file_id = user_doc["renaming_file_id"]
-    file_doc = files_col.find_one({"message_id": file_id})  # ✅ Correct query
+    file_doc = get_file_doc_by_any_id(file_id)  # ✅ Use your helper for permanent link
     if not file_doc:
         await message.reply_text("❌ Original file not found!")
         return
@@ -391,17 +391,48 @@ async def perform_rename(user_id, new_name, message):
     if not new_name.endswith(orig_ext):
         new_name += orig_ext
 
-    # Optional: you can just rename in DB without re-uploading
-    # This avoids empty message errors and saves Telegram bandwidth
+    os.makedirs("/tmp/downloads", exist_ok=True)
+    status_msg = await message.reply_text("📥 Downloading file...")
+
+    try:
+        # Download original message
+        orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["message_id"])
+        temp_file = await app.download_media(
+            orig_msg,
+            file_name=f"/tmp/downloads/{new_name}",
+            progress=progress_callback(status_msg, prefix="📥 Downloading:")
+        )
+
+        if not temp_file:
+            await status_msg.edit_text("❌ Download failed. Possibly file too large or missing.")
+            return
+
+        await status_msg.edit_text("📤 Uploading file...")
+
+        thumb_path = user_doc.get("thumbnail")
+        sent_msg = await app.send_document(
+            DATABASE_CHANNEL,
+            temp_file,
+            file_name=new_name,
+            thumb=thumb_path if thumb_path else None,
+            progress=progress_callback(status_msg, prefix="📤 Uploading:")
+        )
+
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Error: {str(e)}")
+        return
+
+    # Update DB
     files_col.update_one(
-        {"message_id": file_id},
-        {"$set": {"file_name": new_name}}
+        {"file_id": file_id},
+        {"$set": {"file_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}}
     )
 
-    file_link = f"https://t.me/Madara_FSBot?start=file_{file_id}"
+    # Permanent shareable link using original message_id
+    file_link = f"https://t.me/Madara_FSBot?start=file_{file_doc['message_id']}"
 
-    await message.reply_text(
-        f"✅ **File renamed!**\n\n📂 {escape_markdown(new_name)}\n\n🔗 Shareable Link:\n{file_link}",
+    await status_msg.edit_text(
+        f"✅ **File renamed & saved!**\n\n📂 {escape_markdown(new_name)}\n\n🔗 Shareable Link:\n{file_link}",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🗃️ Open File", url=file_link)],
             [InlineKeyboardButton("📢 Support Channel", url=SUPPORT_LINK)]
@@ -410,7 +441,7 @@ async def perform_rename(user_id, new_name, message):
         disable_web_page_preview=True
     )
 
-    # Clear renaming state
+    os.remove(temp_file)
     users_col.update_one({"user_id": user_id}, {"$unset": {"renaming_file_id": ""}})
 
 
