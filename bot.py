@@ -7,6 +7,8 @@ import datetime
 import asyncio
 import re
 import os
+import traceback
+import shlex
 import time
 import subprocess
 import imageio_ffmpeg as ffmpeg
@@ -233,17 +235,20 @@ ffmpeg_path = ffmpeg.get_ffmpeg_exe()
 
 @app.on_message(filters.command("sample"))
 async def sample_trim(client, message: Message):
+    # Check if message is a reply to a video/document
     if not message.reply_to_message or not (
         message.reply_to_message.video or message.reply_to_message.document
     ):
         return await message.reply("⚠️ Please reply to a video file with:\n/sample HH:MM:SS to HH:MM:SS")
 
+    # Parse command times
     match = re.search(r"(\d{2}):(\d{2}):(\d{2})\s+to\s+(\d{2}):(\d{2}):(\d{2})", message.text)
     if not match:
         return await message.reply("❌ Invalid format. Use:\n/sample 00:10:00 to 00:10:30")
 
     h1, m1, s1, h2, m2, s2 = map(int, match.groups())
 
+    # Validate seconds & minutes
     for val in [m1, s1, m2, s2]:
         if val >= 60:
             return await message.reply("⚠️ Minutes and seconds must be less than 60!")
@@ -265,6 +270,7 @@ async def sample_trim(client, message: Message):
     output_path = f"/tmp/sample_clip_{message.from_user.id}.mp4"
     await msg.edit("✂️ Trimming sample video...")
 
+    # FFmpeg command using imageio-ffmpeg executable
     ffmpeg_cmd = [
         ffmpeg_path,
         "-i", input_path,
@@ -287,6 +293,7 @@ async def sample_trim(client, message: Message):
         os.remove(input_path)
         return await msg.edit(f"❌ FFmpeg execution failed:\n{e}")
 
+    # Check output validity
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
         os.remove(input_path)
         return await msg.edit(f"❌ Failed to generate sample. FFmpeg error:\n{stderr.decode()}")
@@ -299,6 +306,7 @@ async def sample_trim(client, message: Message):
         caption=f"✂️ Sample clip from {h1:02}:{m1:02}:{s1:02} to {h2:02}:{m2:02}:{s2:02}"
     )
 
+    # Cleanup
     os.remove(input_path)
     os.remove(output_path)
     await msg.delete()
