@@ -404,7 +404,7 @@ async def perform_rename(user_id, new_name, message):
     status_msg = await message.reply_text("📥 Downloading file...")
 
     try:
-        orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["file_id"])
+        orig_msg = await app.get_messages(file_doc["chat_id"], file_doc["message_id"])
         temp_file = await app.download_media(
             orig_msg,
             file_name=f"/tmp/downloads/{new_name}",
@@ -432,8 +432,8 @@ async def perform_rename(user_id, new_name, message):
         return
 
     files_col.update_one(
-        {"file_id": file_id},
-        {"$set": {"file_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}}
+        {"message_id": file_id},
+        {"$set": {"message_id": sent_msg.id, "chat_id": DATABASE_CHANNEL, "file_name": new_name}}
     )
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
 
