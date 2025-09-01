@@ -92,10 +92,11 @@ async def start(client, message):
 
             # ✅ Send file
             sent_msg = await app.copy_message(
-                chat_id=message.chat.id,
-                from_chat_id=file_doc["chat_id"],
-                message_id=file_doc["file_id"]
-            )
+            chat_id=message.chat.id,
+            from_chat_id=file_doc["chat_id"],
+            message_id=file_doc["message_id"]
+                
+           )
 
             # ⚠️ Show Madara-style warning
             warn_msg = await message.reply_text(
@@ -184,14 +185,18 @@ async def handle_file(client, message):
     fwd_msg = await app.copy_message(DATABASE_CHANNEL, message.chat.id, message.id)
 
     files_col.insert_one({
-        "file_id": fwd_msg.id,
-        "chat_id": fwd_msg.chat.id,
-        "user_id": message.from_user.id,
-        "file_name": file_name,
-        "timestamp": datetime.datetime.now(datetime.timezone.utc),
-        "status": "active"
-    })
-
+        "message_id": fwd_msg.id,                    # Telegram message ID
+        "chat_id": fwd_msg.chat.id,                  # DB channel ID
+        "file_unique_id": (message.document.file_unique_id 
+                           if message.document else 
+                           message.video.file_unique_id 
+                           if message.video else 
+                           message.audio.file_unique_id),
+       "user_id": message.from_user.id,
+       "file_name": file_name,
+       "timestamp": datetime.datetime.now(datetime.timezone.utc),
+       "status": "active"
+ })
     await message.reply_text(
         f"✅ **File received!**\n\n"
         f"💡 **Do you want to rename before getting a shareable link?**\n\n"
