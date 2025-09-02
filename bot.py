@@ -182,19 +182,26 @@ async def handle_file(client, message):
     safe_file_name = escape_markdown(file_name)
     fwd_msg = await app.copy_message(DATABASE_CHANNEL, message.chat.id, message.id)
 
-    files_col.insert_one({
-        "message_id": fwd_msg.id,
-        "chat_id": fwd_msg.chat.id,
-        "file_unique_id": (message.document.file_unique_id 
-                           if message.document else 
-                           message.video.file_unique_id 
-                           if message.video else 
-                           message.audio.file_unique_id),
-        "user_id": message.from_user.id,
-        "file_name": file_name,
-        "timestamp": datetime.datetime.now(datetime.timezone.utc),
-        "status": "active"
-    })
+    # Determine the chat_id to save: use DATABASE_CHANNEL numeric ID
+chat_id_to_save = DATABASE_CHANNEL if DATABASE_CHANNEL else fwd_msg.chat.id
+
+# Insert file into MongoDB
+files_col.insert_one({
+    "message_id": fwd_msg.id,
+    "chat_id": chat_id_to_save,
+    "file_unique_id": (
+        message.document.file_unique_id
+        if message.document else
+        message.video.file_unique_id
+        if message.video else
+        message.audio.file_unique_id
+    ),
+    "user_id": message.from_user.id,
+    "file_name": file_name,
+    "timestamp": datetime.datetime.now(datetime.timezone.utc),
+    "status": "active"
+})
+
 
     await message.reply_text(
         f"✅ **File received!**\n\n"
@@ -429,17 +436,21 @@ async def perform_rename(user_id, new_name, message):
         await status_msg.edit_text(f"❌ Error: {str(e)}")
         return
 
-    # ✅ Insert a NEW DB record for the renamed file (clone)
-    files_col.insert_one({
-        "message_id": sent_msg.id,
-        "chat_id": DATABASE_CHANNEL,
-        "file_unique_id": orig_doc.get("file_unique_id"),
-        "user_id": user_id,
-        "file_name": new_name,
-        "original_file_id": orig_doc.get("message_id"),  # reference to original
-        "timestamp": datetime.datetime.now(datetime.timezone.utc),
-        "status": "active"
-    })
+    # Use the new private channel numeric ID for all new uploads
+chat_id_to_save = DATABASE_CHANNEL  # DATABASE_CHANNEL must be numeric ID of your private channel
+
+# ✅ Insert a NEW DB record for the renamed file (clone)
+files_col.insert_one({
+    "message_id": sent_msg.id,
+    "chat_id": chat_id_to_save,  # store new private channel ID
+    "file_unique_id": orig_doc.get("file_unique_id"),
+    "user_id": user_id,
+    "file_name": new_name,
+    "original_file_id": orig_doc.get("message_id"),  # reference to original file
+    "timestamp": datetime.datetime.now(datetime.timezone.utc),
+    "status": "active"
+})
+
 
     # Permanent link for the renamed file (based on new message_id)
     file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
