@@ -7,7 +7,7 @@ API_HASH = os.getenv("API_HASH", "f4e7f0de47a09671133ecafa6920ebbe")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "7535712545:AAGxGQMONTyWtDLtdecIIuX_od_xFj8GYMw")
 
 # ---------------- CHANNELS & OWNER ----------------
-DATABASE_CHANNEL = os.getenv("DATABASE_CHANNEL", "-1002914069794")
+DATABASE_CHANNEL = os.getenv("DATABASE_CHANNEL", "@dupnc")
 FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "@Fallen_Angels_Team")
 
 # OWNER_IDS supports multiple comma-separated IDs
