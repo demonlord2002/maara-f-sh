@@ -184,7 +184,7 @@ async def handle_file(client, message):
 
     files_col.insert_one({
         "message_id": fwd_msg.id,
-        "chat_id": fwd_msg.chat.id,
+        "chat_id": DATABASE_CHANNEL,
         "file_unique_id": (message.document.file_unique_id 
                            if message.document else 
                            message.video.file_unique_id 
