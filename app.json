@@ -29,7 +29,7 @@
     },
     "DATABASE_CHANNEL": {
       "description": "Telegram Channel ID or username for storing files (e.g., -1001234567890 or @channelusername)",
-      "value": "@dupnc",
+      "value": "@madara_db_test",
       "required": true
     },
     "MONGO_URI": {
