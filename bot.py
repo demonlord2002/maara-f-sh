@@ -239,8 +239,12 @@ async def sample_trim(client, message: Message):
     if not message.reply_to_message or not (
         message.reply_to_message.video or message.reply_to_message.document
     ):
-        return await message.reply("⚠️ Please reply to a video file with:\n/sample HH:MM:SS to HH:MM:SS")
+        return await message.reply(
+            "⚠️ Please reply to a video file with:\n"
+            "/sample HH:MM:SS to HH:MM:SS"
+        )
 
+    # parse time format
     match = re.search(r"(\d{2}):(\d{2}):(\d{2})\s+to\s+(\d{2}):(\d{2}):(\d{2})", message.text)
     if not match:
         return await message.reply("❌ Invalid format. Use:\n/sample 00:10:00 to 00:10:30")
@@ -250,8 +254,8 @@ async def sample_trim(client, message: Message):
         if val >= 60:
             return await message.reply("⚠️ Minutes and seconds must be less than 60!")
 
-    start_sec = h1*3600 + m1*60 + s1
-    end_sec = h2*3600 + m2*60 + s2
+    start_sec = h1 * 3600 + m1 * 60 + s1
+    end_sec = h2 * 3600 + m2 * 60 + s2
     duration = end_sec - start_sec
 
     if duration <= 0 or duration > 60:
@@ -260,14 +264,19 @@ async def sample_trim(client, message: Message):
     msg = await message.reply("📥 Downloading video...")
 
     try:
-        input_path = await message.reply_to_message.download()
+        # Download file with safe name
+        input_path = await message.reply_to_message.download(file_name=f"/tmp/sample_{message.from_user.id}.mp4")
     except Exception:
         return await msg.edit("❌ Download failed. File not saved properly.")
+
+    # Validate file size
+    if not os.path.exists(input_path) or os.path.getsize(input_path) < 100000:  # <100 KB means broken file
+        os.remove(input_path)
+        return await msg.edit("❌ Invalid or corrupted file. Please re-upload the video.")
 
     output_path = f"/tmp/sample_clip_{message.from_user.id}.mp4"
     await msg.edit("✂️ Trimming sample video...")
 
-    # safer ffmpeg command (ss before -i, quoted paths)
     ffmpeg_cmd = [
         ffmpeg_path,
         "-ss", str(start_sec),
@@ -283,34 +292,38 @@ async def sample_trim(client, message: Message):
 
     try:
         process = await asyncio.create_subprocess_exec(
-            *ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            *ffmpeg_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
     except Exception as e:
         if os.path.exists(input_path):
             os.remove(input_path)
-        return await msg.edit(f"❌ FFmpeg execution failed:\n{e}")
+        return await msg.edit(f"❌ FFmpeg execution failed:\n`{e}`")
 
-    if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+    # check output validity
+    if not os.path.exists(output_path) or os.path.getsize(output_path) < 50000:
         if os.path.exists(input_path):
             os.remove(input_path)
-        return await msg.edit(f"❌ Failed to generate sample. FFmpeg error:\n{stderr.decode()}")
+        err_log = stderr.decode().strip()[-400:]  # last 400 chars only
+        return await msg.edit(f"❌ Failed to generate sample.\n\n**FFmpeg error:**\n`{err_log}`")
 
     await msg.edit("📤 Uploading sample...")
 
-    await client.send_video(
-        chat_id=message.chat.id,
-        video=output_path,
-        caption=f"✂️ Sample clip from {h1:02}:{m1:02}:{s1:02} to {h2:02}:{m2:02}:{s2:02}"
-    )
-
-    # cleanup
-    if os.path.exists(input_path):
-        os.remove(input_path)
-    if os.path.exists(output_path):
-        os.remove(output_path)
-
-    await msg.delete()   # remove status message at the end
+    try:
+        await client.send_video(
+            chat_id=message.chat.id,
+            video=output_path,
+            caption=f"✂️ Sample clip from {h1:02}:{m1:02}:{s1:02} to {h2:02}:{m2:02}:{s2:02}"
+        )
+    except Exception as e:
+        await msg.edit(f"❌ Upload failed:\n`{e}`")
+    finally:
+        # cleanup
+        if os.path.exists(input_path):
+            os.remove(input_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        await msg.delete()   # remove status message
 
 
 # ---------------- LINK CALLBACK ----------------
