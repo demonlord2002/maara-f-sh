@@ -13,7 +13,7 @@ FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "@DemonSlayerInfi
 # OWNER_IDS supports multiple comma-separated IDs
 
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS", "7813285237").split(",")))
-OWNER_USERNAME = os.getenv("OWNER_USERNAME", "SunsetOfMe")
+OWNER_USERNAME = os.getenv("OWNER_USERNAME", "MoviesNewHDTamil")
 SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/DemonSlayerInfinityTamil")
 
 # ---------------- MONGO DB ----------------
