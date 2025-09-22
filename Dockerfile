@@ -1,6 +1,6 @@
 FROM python:3.9-slim
 
-# Install build dependencies needed for tgcrypto and other C extensions
+# Install build dependencies for tgcrypto and other C extensions
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
