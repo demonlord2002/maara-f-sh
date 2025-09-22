@@ -2,6 +2,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from pyrogram.enums import ParseMode
 from pymongo import MongoClient
+from keep_alive import keep_alive
 from config import *
 import datetime
 import asyncio
@@ -12,6 +13,8 @@ import shlex
 import time
 import subprocess
 import imageio_ffmpeg as ffmpeg
+
+keep_alive()
 
 # ---------------- MONGO DB SETUP ----------------
 mongo = MongoClient(MONGO_URI)
