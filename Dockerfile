@@ -1,6 +1,6 @@
 FROM python:3.9-slim
 
-# Install build tools (needed for tgcrypto & other C extensions)
+# Install build dependencies needed for tgcrypto and other C extensions
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -9,10 +9,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Copy all repo files into container
 COPY . /app
 
-# Install Python dependencies
+# Install requirements after gcc is available
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Run your bot
-CMD ["python", "main.py"]
+# Start your bot
+CMD ["python", "bot.py"]
