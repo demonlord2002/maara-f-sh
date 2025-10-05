@@ -8,13 +8,13 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "7535712545:AAGxGQMONTyWtDLtdecIIuX_od_xFj8GY
 
 # ---------------- CHANNELS & OWNER ----------------
 DATABASE_CHANNEL = os.getenv("DATABASE_CHANNEL", "@dupnc")
-FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "@IdlyKadaiMovie2025")
+FORCE_SUBSCRIBE_CHANNEL = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "@BiggBossTamil9HD")
 
 # OWNER_IDS supports multiple comma-separated IDs
 
 OWNER_IDS = list(map(int, os.getenv("OWNER_IDS", "7813285237").split(",")))
 OWNER_USERNAME = os.getenv("OWNER_USERNAME", "MoviesNewHDTamil")
-SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/IdlyKadaiMovie2025")
+SUPPORT_LINK = os.getenv("SUPPORT_LINK", "https://t.me/BiggBossTamil9HD")
 
 # ---------------- MONGO DB ----------------
 MONGO_URI = os.getenv(
