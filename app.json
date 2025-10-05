@@ -39,12 +39,12 @@
     },
     "FORCE_SUBSCRIBE_CHANNEL": {
       "description": "Telegram channel username for force subscribe",
-      "value": "@IdlyKadaiMovie2025",
+      "value": "@BiggBossTamil9HD",
       "required": true
     },
     "SUPPORT_LINK": {
       "description": "Telegram support channel link",
-      "value": "https://t.me/IdlyKadaiMovie2025",
+      "value": "https://t.me/BiggBossTamil9HD",
       "required": true
     },
     "OWNER_USERNAME": {
