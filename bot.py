@@ -132,7 +132,7 @@ async def start(client, message):
         upsert=True
     )
 
-    if not await is_subscribed(message.from_user.id):
+if not await is_subscribed(message.from_user.id):
     await message.reply_text(
         "🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 🌸\n\n"
         "🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗹𝗼𝗰𝗸𝗲𝗱 — 𝗕𝗲𝗰𝗼𝗺𝗲 𝗽𝗮𝗿𝘁 𝗼𝗳 𝗵𝗲𝗿 𝗺𝗮𝗴𝗶𝗰𝗮𝗹 𝗰𝗶𝗿𝗰𝗹𝗲 𝘁𝗼 𝗰𝗼𝗻𝘁𝗶𝗻𝘂𝗲 💖✨",
