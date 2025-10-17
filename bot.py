@@ -347,7 +347,7 @@ async def send_shareable_link(client, callback_query):
         return
 
     file_name = escape_markdown(file_doc["file_name"])
-    file_link = f"https://t.me/Madara_FSBot?start=file_{file_doc['message_id']}"
+    file_link = f"https://t.me/NezomiMusicBot?start=file_{file_doc['message_id']}"
 
     await callback_query.message.edit_text(
         f"✅ **File saved!**\n\n📂 File Name: {file_name}\n\n🔗 Shareable Link:\n{file_link}",
@@ -468,7 +468,7 @@ async def perform_rename(user_id, new_name, message):
     })
 
     # Permanent link for the renamed file (based on new message_id)
-    file_link = f"https://t.me/Madara_FSBot?start=file_{sent_msg.id}"
+    file_link = f"https://t.me/NezomiMusicBot?start=file_{sent_msg.id}"
 
     await status_msg.edit_text(
         f"✅ **File renamed & saved!**\n\n📂 {escape_markdown(new_name)}\n\n🔗 Shareable Link:\n{file_link}",
