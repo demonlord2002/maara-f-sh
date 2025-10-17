@@ -88,8 +88,8 @@ async def start(client, message):
         if file_doc:
             if not await is_subscribed(message.from_user.id):
                 await message.reply_text(
-                    f"⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
-                    f"🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗟𝗼𝗰𝗸𝗲𝗱, 𝗼𝗻𝗹𝘆 𝗠𝗲𝗺𝗯𝗲𝗿𝘀 𝗼𝗳 𝗠𝗮𝗱𝗮𝗿𝗮 𝗙𝗮𝗺𝗶𝗹𝘆 𝗰𝗮𝗻 𝘂𝘀𝗲 ❤️🥷",
+                    f"🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗚𝗮𝗿𝗱𝗲𝗻 🌸\n\n"
+                    f"💫 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗣𝗿𝗶𝘃𝗮𝘁𝗲 — 𝗢𝗻𝗹𝘆 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗖𝗶𝗿𝗰𝗹𝗲 𝗼𝗳 𝗟𝗶𝗴𝗵𝘁 𝗺𝗮𝘆 𝗲𝗻𝘁𝗲𝗿 💖✨",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]]
                     )
@@ -103,9 +103,9 @@ async def start(client, message):
             )
 
             warn_msg = await message.reply_text(
-                "⚠️ **Due to copyright ©️ issues this file will be auto-deleted in 10 minutes!**\n\n"
-                "💾 Save it to your **Saved Messages** immediately ⚡\n\n"
-                "👑 Madara protects his Family ❤️🥷"
+                "⚠️ **Copyright Notice ©️** — This file will vanish in **10 minutes!** ⏳\n\n"
+                "💫 Save it quickly to your **Saved Messages**, beautiful soul 🌸\n\n"
+                "🌙 Nezomi watches over her world with quiet grace 💖✨"
             )
 
             async def delete_later():
@@ -133,27 +133,31 @@ async def start(client, message):
     )
 
     if not await is_subscribed(message.from_user.id):
-        await message.reply_text(
-            "⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
-            "🔒 𝗬𝗼𝘂𝗿 𝗮𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗟𝗼𝗰𝗸𝗲𝗱, 𝗝𝗼𝗶𝗻 𝗳𝗶𝗿𝘀𝘁 𝘁𝗼 𝘂𝗻𝗹𝗼𝗰𝗸 ❤️🥷",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🚪 Join Channel", url=SUPPORT_LINK)],
-                [InlineKeyboardButton("✅ Verify Now", callback_data="verify_sub")]
-            ]),
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
     await message.reply_text(
-        f"👑 𝗠𝗮𝗱𝗮𝗿𝗮 𝗪𝗲𝗹𝗰𝗼𝗺𝗲𝘀 𝗬𝗼𝘂 👑\n\n"
-        f"✨ 𝗛𝗲𝗹𝗹𝗼 {escape_markdown(message.from_user.first_name)} ❤️\n\n"
-        f"📂 𝗦𝗲𝗻𝗱 𝗺𝗲 𝗮𝗻𝘆 𝗳𝗶𝗹𝗲 & 𝗜’𝗹𝗹 𝗰𝗿𝗲𝗮𝘁𝗲 𝗮 𝘀𝗵𝗮𝗿𝗲𝗮𝗯𝗹𝗲 𝗹𝗶𝗻𝗸 𝗳𝗼𝗿 𝘆𝗼𝘂 ⚡",
+        "🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 🌸\n\n"
+        "🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗹𝗼𝗰𝗸𝗲𝗱 — 𝗕𝗲𝗰𝗼𝗺𝗲 𝗽𝗮𝗿𝘁 𝗼𝗳 𝗵𝗲𝗿 𝗺𝗮𝗴𝗶𝗰𝗮𝗹 𝗰𝗶𝗿𝗰𝗹𝗲 𝘁𝗼 𝗰𝗼𝗻𝘁𝗶𝗻𝘂𝗲 💖✨",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("👑 Owner", url=f"https://t.me/{OWNER_USERNAME}"),
-             InlineKeyboardButton("📢 Support", url=SUPPORT_LINK)]
+            [InlineKeyboardButton("🌷 Join Nezomi’s Channel", url=SUPPORT_LINK)],
+            [InlineKeyboardButton("💫 Verify Now", callback_data="verify_sub")]
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
+    return
+
+
+await message.reply_text(
+    f"🌸 𝗡𝗲𝘇𝗼𝗺𝗶 𝗪𝗲𝗹𝗰𝗼𝗺𝗲𝘀 𝗬𝗼𝘂 🌸\n\n"
+    f"✨ 𝗛𝗲𝘆 {escape_markdown(message.from_user.first_name)} 💕\n\n"
+    f"📂 𝗦𝗲𝗻𝗱 𝗺𝗲 𝗮𝗻𝘆 𝗳𝗶𝗹𝗲 — 𝗜’𝗹𝗹 𝗰𝗿𝗲𝗮𝘁𝗲 𝗮 𝗺𝗮𝗴𝗶𝗰𝗮𝗹 𝘀𝗵𝗮𝗿𝗲𝗮𝗯𝗹𝗲 𝗹𝗶𝗻𝗸 𝗳𝗼𝗿 𝘆𝗼𝘂 ⚡",
+    reply_markup=InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🌸 Owner", url=f"https://t.me/{OWNER_USERNAME}"),
+            InlineKeyboardButton("💫 Support", url=SUPPORT_LINK)
+        ]
+    ]),
+    parse_mode=ParseMode.MARKDOWN
+)
+
 
 # ---------------- VERIFY ----------------
 @app.on_callback_query(filters.regex("verify_sub"))
@@ -169,8 +173,8 @@ async def verify_subscription(client, callback_query):
 async def handle_file(client, message):
     if not await is_subscribed(message.from_user.id):
         await message.reply_text(
-            f"⚡ 𝗝𝗼𝗶𝗻 𝗼𝘂𝗿 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 ⚡\n\n"
-            f"🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗟𝗼𝗰𝗸𝗲𝗱, 𝗼𝗻𝗹𝘆 𝗠𝗲𝗺𝗯𝗲𝗿𝘀 𝗼𝗳 𝗠𝗮𝗱𝗮𝗿𝗮 𝗙𝗮𝗺𝗶𝗹𝘆 𝗰𝗮𝗻 𝘂𝘀𝗲 ❤️🥷",
+            f"🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 🌸\n\n"
+            f"🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗟𝗼𝗰𝗸𝗲𝗱 — 𝗼𝗻𝗹𝘆 𝗵𝗲𝗿 𝗲𝗹𝗶𝘁𝗲 𝗰𝗶𝗿𝗰𝗹𝗲 𝗺𝗮𝘆 𝗲𝗻𝘁𝗲𝗿 💖✨",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]])
         )
         return
