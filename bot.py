@@ -82,32 +82,38 @@ def get_file_doc_by_any_id(fid, active_only=False):
 @app.on_message(filters.command("start"))
 async def start(client, message):
     args = message.text.split(maxsplit=1)
+
+    # If a file link is present
     if len(args) > 1 and args[1].startswith("file_"):
         file_id = int(args[1].replace("file_", ""))
         file_doc = get_file_doc_by_any_id(file_id, active_only=True)
+
         if file_doc:
             if not await is_subscribed(message.from_user.id):
                 await message.reply_text(
-                    f"🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗚𝗮𝗿𝗱𝗲𝗻 🌸\n\n"
-                    f"💫 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗣𝗿𝗶𝘃𝗮𝘁𝗲 — 𝗢𝗻𝗹𝘆 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗖𝗶𝗿𝗰𝗹𝗲 𝗼𝗳 𝗟𝗶𝗴𝗵𝘁 𝗺𝗮𝘆 𝗲𝗻𝘁𝗲𝗿 💖✨",
+                    "🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗚𝗮𝗿𝗱𝗲𝗻 🌸\n\n"
+                    "💫 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗣𝗿𝗶𝘃𝗮𝘁𝗲 — 𝗢𝗻𝗹𝘆 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗖𝗶𝗿𝗰𝗹𝗲 𝗼𝗳 𝗟𝗶𝗴𝗵𝘁 𝗺𝗮𝘆 𝗲𝗻𝘁𝗲𝗿 💖✨",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]]
                     )
                 )
                 return
 
+            # Copy file to user chat
             sent_msg = await app.copy_message(
                 chat_id=message.chat.id,
                 from_chat_id=file_doc["chat_id"],
                 message_id=file_doc["message_id"]
             )
 
+            # Send copyright warning
             warn_msg = await message.reply_text(
                 "⚠️ **Copyright Notice ©️** — This file will vanish in **10 minutes!** ⏳\n\n"
                 "💫 Save it quickly to your **Saved Messages**, beautiful soul 🌸\n\n"
                 "🌙 Nezomi watches over her world with quiet grace 💖✨"
             )
 
+            # Delete messages after 10 minutes
             async def delete_later():
                 await asyncio.sleep(600)
                 try:
@@ -122,6 +128,7 @@ async def start(client, message):
             await message.reply_text("❌ File not available.")
             return
 
+    # Update user in database
     users_col.update_one(
         {"user_id": message.from_user.id},
         {"$set": {
@@ -132,32 +139,32 @@ async def start(client, message):
         upsert=True
     )
 
-if not await is_subscribed(message.from_user.id):
+    # Check subscription for normal start (not file link)
+    if not await is_subscribed(message.from_user.id):
+        await message.reply_text(
+            "🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 🌸\n\n"
+            "🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗹𝗼𝗰𝗸𝗲𝗱 — 𝗕𝗲𝗰𝗼𝗺𝗲 𝗽𝗮𝗿𝘁 𝗼𝗳 𝗵𝗲𝗿 𝗺𝗮𝗴𝗶𝗰𝗮𝗹 𝗰𝗶𝗿𝗰𝗹𝗲 💖✨",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🌷 Join Nezomi’s Channel", url=SUPPORT_LINK)],
+                [InlineKeyboardButton("💫 Verify Now", callback_data="verify_sub")]
+            ]),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Normal welcome message
     await message.reply_text(
-        "🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 🌸\n\n"
-        "🔒 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗹𝗼𝗰𝗸𝗲𝗱 — 𝗕𝗲𝗰𝗼𝗺𝗲 𝗽𝗮𝗿𝘁 𝗼𝗳 𝗵𝗲𝗿 𝗺𝗮𝗴𝗶𝗰𝗮𝗹 𝗰𝗶𝗿𝗰𝗹𝗲 𝘁𝗼 𝗰𝗼𝗻𝘁𝗶𝗻𝘂𝗲 💖✨",
+        f"🌸 𝗡𝗲𝘇𝗼𝗺𝗶 𝗪𝗲𝗹𝗰𝗼𝗺𝗲𝘀 𝗬𝗼𝘂 🌸\n\n"
+        f"✨ 𝗛𝗲𝘆 {escape_markdown(message.from_user.first_name)} 💕\n\n"
+        f"📂 𝗦𝗲𝗻𝗱 𝗺𝗲 𝗮𝗻𝘆 𝗳𝗶𝗹𝗲 — 𝗜’𝗹𝗹 𝗰𝗿𝗲𝗮𝘁𝗲 𝗮 𝗺𝗮𝗴𝗶𝗰𝗮𝗹 𝘀𝗵𝗮𝗿𝗲𝗮𝗯𝗹𝗲 𝗹𝗶𝗻𝗸 𝗳𝗼𝗿 𝘆𝗼𝘂 ⚡",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🌷 Join Nezomi’s Channel", url=SUPPORT_LINK)],
-            [InlineKeyboardButton("💫 Verify Now", callback_data="verify_sub")]
+            [
+                InlineKeyboardButton("🌸 Owner", url=f"https://t.me/{OWNER_USERNAME}"),
+                InlineKeyboardButton("💫 Support", url=SUPPORT_LINK)
+            ]
         ]),
         parse_mode=ParseMode.MARKDOWN
     )
-    return
-
-
-await message.reply_text(
-    f"🌸 𝗡𝗲𝘇𝗼𝗺𝗶 𝗪𝗲𝗹𝗰𝗼𝗺𝗲𝘀 𝗬𝗼𝘂 🌸\n\n"
-    f"✨ 𝗛𝗲𝘆 {escape_markdown(message.from_user.first_name)} 💕\n\n"
-    f"📂 𝗦𝗲𝗻𝗱 𝗺𝗲 𝗮𝗻𝘆 𝗳𝗶𝗹𝗲 — 𝗜’𝗹𝗹 𝗰𝗿𝗲𝗮𝘁𝗲 𝗮 𝗺𝗮𝗴𝗶𝗰𝗮𝗹 𝘀𝗵𝗮𝗿𝗲𝗮𝗯𝗹𝗲 𝗹𝗶𝗻𝗸 𝗳𝗼𝗿 𝘆𝗼𝘂 ⚡",
-    reply_markup=InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🌸 Owner", url=f"https://t.me/{OWNER_USERNAME}"),
-            InlineKeyboardButton("💫 Support", url=SUPPORT_LINK)
-        ]
-    ]),
-    parse_mode=ParseMode.MARKDOWN
-)
-
 
 # ---------------- VERIFY ----------------
 @app.on_callback_query(filters.regex("verify_sub"))
