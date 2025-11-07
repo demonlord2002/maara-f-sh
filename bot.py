@@ -82,47 +82,112 @@ def get_file_doc_by_any_id(fid, active_only=False):
 @app.on_message(filters.command("start"))
 async def start(client, message):
     args = message.text.split(maxsplit=1)
+    user_id = message.from_user.id
+    requested_file_id = None
 
-    # If a file link is present
+    # Check if link contains file
     if len(args) > 1 and args[1].startswith("file_"):
-        file_id = int(args[1].replace("file_", ""))
-        file_doc = get_file_doc_by_any_id(file_id, active_only=True)
+        requested_file_id = int(args[1].replace("file_", ""))
 
+    # Update user in DB
+    users_col.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "username": message.from_user.username,
+            "first_name": message.from_user.first_name,
+            "last_name": message.from_user.last_name
+        }},
+        upsert=True
+    )
+
+    # Force subscribe check
+    if not await is_subscribed(user_id):
+        buttons = [
+            [InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]
+        ]
+        if requested_file_id:
+            buttons.append([InlineKeyboardButton("✅ Verify", callback_data=f"verify_file_{requested_file_id}")])
+        else:
+            buttons.append([InlineKeyboardButton("✅ Verify", callback_data="verify_sub")])
+
+        await message.reply_text(
+            "🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗖𝗵𝗮𝗻𝗻𝗲𝗹 🌸\n\n"
+            "💫 Access is private — Only Nezomi’s Circle of Light may enter 💖✨",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    # User already subscribed, send file if requested
+    if requested_file_id:
+        file_doc = get_file_doc_by_any_id(requested_file_id, active_only=True)
         if file_doc:
-            if not await is_subscribed(message.from_user.id):
-                await message.reply_text(
-                    "🌸 𝗝𝗼𝗶𝗻 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗦𝘂𝗽𝗽𝗼𝗿𝘁 𝗚𝗮𝗿𝗱𝗲𝗻 🌸\n\n"
-                    "💫 𝗔𝗰𝗰𝗲𝘀𝘀 𝗶𝘀 𝗣𝗿𝗶𝘃𝗮𝘁𝗲 — 𝗢𝗻𝗹𝘆 𝗡𝗲𝘇𝗼𝗺𝗶’𝘀 𝗖𝗶𝗿𝗰𝗹𝗲 𝗼𝗳 𝗟𝗶𝗴𝗵𝘁 𝗺𝗮𝘆 𝗲𝗻𝘁𝗲𝗿 💖✨",
-                    reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("🚪 Join Now", url=SUPPORT_LINK)]]
-                    )
-                )
-                return
+            await send_file_with_copyright(message, file_doc)
+        else:
+            await message.reply_text("❌ File not available.")
+        return
 
-            # Copy file to user chat
-            sent_msg = await app.copy_message(
-                chat_id=message.chat.id,
-                from_chat_id=file_doc["chat_id"],
-                message_id=file_doc["message_id"]
-            )
+    # Normal welcome message
+    await message.reply_text(
+        f"🌸 𝗡𝗲𝘇𝗼𝗺𝗶 𝗪𝗲𝗹𝗰𝗼𝗺𝗲𝘀 𝗬𝗼𝘂 🌸\n\n"
+        f"✨ Hey {escape_markdown(message.from_user.first_name)} 💕\n\n"
+        "📂 Send me any file — I’ll create a magical shareable link for you ⚡",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🌸 Owner", url=f"https://t.me/{OWNER_USERNAME}"),
+                InlineKeyboardButton("💫 Support", url=SUPPORT_LINK)
+            ]
+        ]),
+        parse_mode=ParseMode.MARKDOWN
+    )
 
-            # Send copyright warning
-            warn_msg = await message.reply_text(
-                "⚠️ **Copyright Notice ©️** — This file will vanish in **10 minutes!** ⏳\n\n"
-                "💫 Save it quickly to your **Saved Messages**, beautiful soul 🌸\n\n"
-                "🌙 Nezomi watches over her world with quiet grace 💖✨"
-            )
+# ---------------- VERIFY CALLBACK ----------------
+@app.on_callback_query(filters.regex(r"verify_file_(\d+)"))
+async def verify_file_subscription(client, callback_query):
+    user_id = callback_query.from_user.id
+    file_id = int(callback_query.data.split("_")[-1])
 
-            # Delete messages after 10 minutes
-            async def delete_later():
-                await asyncio.sleep(600)
-                try:
-                    await sent_msg.delete()
-                    await warn_msg.edit_text("❌ File deleted automatically due to copyright ©️ rules.")
-                except:
-                    pass
+    if await is_subscribed(user_id):
+        await callback_query.message.edit_text("✅ Verified! Sending your file now...")
+        file_doc = get_file_doc_by_any_id(file_id, active_only=True)
+        if file_doc:
+            await send_file_with_copyright(callback_query.message, file_doc)
+        else:
+            await callback_query.message.reply_text("❌ File not available.")
+    else:
+        await callback_query.answer("❌ Not subscribed yet! Join first ⚡", show_alert=True)
 
-            asyncio.create_task(delete_later())
+# Keep your old verify_sub for normal start without file
+@app.on_callback_query(filters.regex("verify_sub"))
+async def verify_subscription(client, callback_query):
+    user_id = callback_query.from_user.id
+    if await is_subscribed(user_id):
+        await callback_query.message.edit_text("✅ Verified! Welcome to Madara Family ❤️")
+    else:
+        await callback_query.answer("❌ Not subscribed yet! Join first ⚡", show_alert=True)
+
+# ---------------- HELPER: SEND FILE ----------------
+async def send_file_with_copyright(target_message, file_doc):
+    sent_msg = await app.copy_message(
+        chat_id=target_message.chat.id,
+        from_chat_id=file_doc["chat_id"],
+        message_id=file_doc["message_id"]
+    )
+
+    warn_msg = await target_message.reply_text(
+        "⚠️ **Copyright Notice ©️** — This file will vanish in **10 minutes!** ⏳\n\n"
+        "💫 Save it quickly to your **Saved Messages**, beautiful soul 🌸\n\n"
+        "🌙 Nezomi watches over her world with quiet grace 💖✨"
+    )
+
+    async def delete_later():
+        await asyncio.sleep(600)
+        try:
+            await sent_msg.delete()
+            await warn_msg.edit_text("❌ File deleted automatically due to copyright ©️ rules.")
+        except:
+            pass
+
+    asyncio.create_task(delete_later())
             return
         else:
             await message.reply_text("❌ File not available.")
